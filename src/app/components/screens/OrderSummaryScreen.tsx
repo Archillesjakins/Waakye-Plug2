@@ -3,6 +3,7 @@
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { ChevronLeft, Minus, Plus, Trash2, Banknote, Smartphone } from 'lucide-react';
+import { toast } from 'sonner';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 import { useCart, CartLine, lineUnitPrice } from '@/app/context/CartContext';
 import { DELIVERY_FEE, SERVICE_FEE } from '@/app/types/orderTypes';
@@ -24,7 +25,7 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
   const [locating, setLocating] = useState(false);
   const detectLocation = () => {
     if (!navigator.geolocation) {
-      alert('Geolocation not supported on this device');
+      toast.error('Geolocation not supported on this device');
       return;
     }
     setLocating(true);
@@ -57,7 +58,7 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
         }
       },
       () => {
-        alert('Unable to fetch location. Please enter manually.');
+        toast.error('Unable to fetch location. Please enter manually.');
         setLocating(false);
       }
     );

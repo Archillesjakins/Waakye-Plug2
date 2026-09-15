@@ -1,0 +1,15 @@
+/vendors
+/orders
+/player_stats
+/profiles
+/rider_settlements
+/vendor_menu_items
+/riders
+/order_issues
+/spin_history
+/points_earned_log
+/rpc/is_admin
+/rpc/get_my_role
+/rpc/is_approved_rider
+/rpc/is_my_rider_profile
+/rpc/owns_vendor

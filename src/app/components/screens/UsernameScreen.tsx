@@ -67,7 +67,7 @@ export function UsernameScreen() {
       <div className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900 mb-1">Let's get you set up</h2>
         <p className="text-sm text-gray-500 mb-5">
-          Your name and number keep your orders and points tied to you — even if someone else uses the same name.
+          Your name and number keep your orders tied to you — even if someone else uses the same name.
         </p>
 
         <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>

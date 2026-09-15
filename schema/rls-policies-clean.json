@@ -1,0 +1,262 @@
+[
+  {
+    "schemaname": "public",
+    "tablename": "order_issues",
+    "policyname": "issues_insert_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "is_my_rider_profile(rider_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "order_issues",
+    "policyname": "issues_select_own_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(is_my_rider_profile(rider_id) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "policyname": "orders_insert_customer",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(customer_id = auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "policyname": "orders_select_relevant",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((customer_id = auth.uid()) OR owns_vendor(vendor_id) OR ((rider_id IS NULL) AND (status = ANY (ARRAY['ready'::text, 'available'::text])) AND (delivery_mode = 'delivery'::text) AND is_approved_rider()) OR ((rider_id IS NOT NULL) AND is_my_rider_profile(rider_id)) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "orders",
+    "policyname": "orders_update_relevant",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((customer_id = auth.uid()) OR owns_vendor(vendor_id) OR ((rider_id IS NOT NULL) AND is_my_rider_profile(rider_id)) OR ((rider_id IS NULL) AND (status = ANY (ARRAY['ready'::text, 'available'::text])) AND (delivery_mode = 'delivery'::text) AND is_approved_rider()) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "player_stats",
+    "policyname": "insert_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "player_stats",
+    "policyname": "read_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "player_stats",
+    "policyname": "update_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "points_earned_log",
+    "policyname": "points_log_insert_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "points_earned_log",
+    "policyname": "points_log_read_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "profiles",
+    "policyname": "profiles_insert_self",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((auth.uid() = id) AND (role = 'customer'::text))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "profiles",
+    "policyname": "profiles_select_own_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((auth.uid() = id) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "profiles",
+    "policyname": "profiles_update_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(auth.uid() = id)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "profiles",
+    "policyname": "profiles_update_own_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((auth.uid() = id) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "riders",
+    "policyname": "riders_insert_self_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((profile_id = auth.uid()) OR is_admin())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "riders",
+    "policyname": "riders_select_self_or_vendor_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((profile_id = auth.uid()) OR owns_vendor(vendor_id) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "riders",
+    "policyname": "riders_update_self_or_vendor_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((profile_id = auth.uid()) OR owns_vendor(vendor_id) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "spin_history",
+    "policyname": "spins_insert",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "spin_history",
+    "policyname": "spins_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "vendor_menu_items",
+    "policyname": "menu_delete_owner_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "DELETE",
+    "qual": "(owns_vendor(vendor_id) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "vendor_menu_items",
+    "policyname": "menu_insert_owner_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(owns_vendor(vendor_id) OR is_admin())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "vendor_menu_items",
+    "policyname": "menu_select_public_or_owner_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((EXISTS ( SELECT 1\n   FROM vendors v\n  WHERE ((v.id = vendor_menu_items.vendor_id) AND (v.status = 'approved'::text)))) OR owns_vendor(vendor_id) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "vendor_menu_items",
+    "policyname": "menu_update_owner_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(owns_vendor(vendor_id) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "vendors",
+    "policyname": "vendors_insert_self_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "((owner_id = auth.uid()) OR is_admin())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "vendors",
+    "policyname": "vendors_select_approved_or_owner_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((status = 'approved'::text) OR (owner_id = auth.uid()) OR is_admin())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "vendors",
+    "policyname": "vendors_update_owner_or_admin",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((owner_id = auth.uid()) OR is_admin())",
+    "with_check": null
+  }
+]

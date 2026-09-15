@@ -2,36 +2,62 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Check, PartyPopper, Clock, ChefHat, PackageCheck, Bike, Home, XCircle } from 'lucide-react';
+import { Check, PartyPopper, Clock, Bike, Home, XCircle } from 'lucide-react';
 import { useCart, CartLine, lineUnitPrice } from '@/app/context/CartContext';
 import { supabase } from '@/app/lib/supabase';
 
 interface ConfirmationScreenProps {
   orderId: string | null;
   onDone: () => void;
-  onSaveOrder: (order: any) => void;
 }
 
-type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'picked_up' | 'delivered' | 'cancelled';
+// The real status lifecycle, matching what the system actually writes:
+// customer inserts 'available'; rider app writes 'rider_assigned',
+// 'picked_up', 'delivered'; vendor app writes 'cancelled'. ('pending' /
+// 'accepted' / 'preparing' / 'ready' are ghosts — nothing in any app ever
+// wrote them.)
+type OrderStatus = 'available' | 'rider_assigned' | 'picked_up' | 'delivered' | 'cancelled';
 
+// Canonical steps shown in the tracker, in lifecycle order.
 const STATUS_STEPS: { key: OrderStatus; label: string; icon: any }[] = [
-  { key: 'pending', label: 'Order Placed', icon: Clock },
-  { key: 'accepted', label: 'Accepted', icon: Check },
-  { key: 'preparing', label: 'Preparing', icon: ChefHat },
-  { key: 'ready', label: 'Ready', icon: PackageCheck },
+  { key: 'available', label: 'Order Sent', icon: Clock },
+  { key: 'rider_assigned', label: 'Rider Assigned', icon: Check },
   { key: 'picked_up', label: 'On the way', icon: Bike },
   { key: 'delivered', label: 'Delivered', icon: Home },
 ];
 
-export function ConfirmationScreen({ orderId, onDone, onSaveOrder }: ConfirmationScreenProps) {
+// Legacy statuses an old row might still carry (pre-canonical-enum data).
+// Map them onto the closest real step so the tracker never shows a wrong
+// position; unknown statuses default to step 0.
+const LEGACY_STEP_INDEX: Record<string, number> = {
+  pending: 0,
+  accepted: 0,
+  preparing: 0,
+  ready: 0,
+};
+
+export function ConfirmationScreen({ orderId, onDone }: ConfirmationScreenProps) {
   const { lines, totalPrice } = useCart();
-  const [status, setStatus] = useState<OrderStatus>('pending');
+  const [status, setStatus] = useState<OrderStatus>('available');
 
   // Live status — subscribes to this specific order row and updates the
-  // instant the vendor changes its status in OrdersTab.tsx. Requires
-  // realtime replication enabled on the orders table in Supabase.
+  // instant the rider claims / picks up / delivers, or the vendor cancels.
+  // Requires realtime replication enabled on the orders table in Supabase.
   useEffect(() => {
     if (!orderId) return;
+
+    // Mount-time sync: if the user re-enters this screen (or reloads) after
+    // the order has already progressed, start from the real current status
+    // instead of always showing "Order Sent".
+    let alive = true;
+    supabase
+      .from('orders')
+      .select('status')
+      .eq('id', orderId)
+      .single()
+      .then(({ data }) => {
+        if (alive && data?.status) setStatus(data.status as OrderStatus);
+      });
 
     const channel = supabase
       .channel(`order-status-${orderId}`)
@@ -46,6 +72,7 @@ export function ConfirmationScreen({ orderId, onDone, onSaveOrder }: Confirmatio
       .subscribe();
 
     return () => {
+      alive = false;
       supabase.removeChannel(channel);
     };
   }, [orderId]);
@@ -55,17 +82,28 @@ export function ConfirmationScreen({ orderId, onDone, onSaveOrder }: Confirmatio
 
   const currentStepIndex = STATUS_STEPS.findIndex((s) => s.key === status);
 
+  // Step position for rendering: legacy statuses map through LEGACY_STEP_INDEX;
+  // unknown statuses default to step 0. 'cancelled' is handled separately.
+  const stepIndex =
+    currentStepIndex >= 0
+      ? currentStepIndex
+      : (LEGACY_STEP_INDEX[status] ?? 0);
+
   function handleDone() {
-    lines.forEach((line) => {
-      onSaveOrder({
-        id: line.id,
-        items: line.items,
-        quantity: line.quantity,
-        createdAt: new Date().toISOString(),
-      });
-    });
     onDone();
   }
+
+  // Friendly, status-aware header copy so re-entering the screen late shows
+  // where things actually are, not a stale "Order Sent!".
+  const HEADER_COPY: Record<OrderStatus, { title: string; icon: any; sub: string }> = {
+    available: { title: 'Order Sent!', icon: PartyPopper, sub: 'We\u2019re lining up a rider \u2014 this updates live.' },
+    rider_assigned: { title: 'Rider Assigned!', icon: Check, sub: 'Your rider has the order \u2014 food is on its way soon.' },
+    picked_up: { title: 'On the Way!', icon: Bike, sub: 'Your rider has picked it up \u2014 keep your phone close.' },
+    delivered: { title: 'Delivered!', icon: Home, sub: 'Enjoy your waakye \u2014 thanks for ordering!' },
+    cancelled: { title: 'Order Cancelled', icon: XCircle, sub: 'The vendor cancelled this order. Reach out to them directly if you\u2019re not sure why.' },
+  };
+  const header = HEADER_COPY[status] ?? HEADER_COPY.available;
+  const HeaderIcon = header.icon;
 
   return (
     <div className="min-h-[100dvh] bg-[#fefaf4] flex items-center justify-center px-4 py-6 [webkit-tap-highlight-color:transparent]">
@@ -93,29 +131,29 @@ export function ConfirmationScreen({ orderId, onDone, onSaveOrder }: Confirmatio
                 transition={{ delay: 0.2, type: 'spring' }}
                 className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5"
               >
-                <Check className="w-8 h-8 text-green-600" />
+                <HeaderIcon className="w-8 h-8 text-green-600" />
               </motion.div>
 
-              <h1 className="text-2xl font-bold text-center mb-1.5 flex items-center justify-center gap-2">
-                Order Sent! <PartyPopper className="w-5 h-5 text-amber-500" />
+              <h1 className="text-2xl font-bold text-center mb-1.5">
+                {header.title}
               </h1>
               <p className="text-gray-500 text-center text-sm mb-5">
-                The vendor has your order — this updates live as they work on it.
+                {header.sub}
               </p>
 
               {/* ── Live status tracker ── */}
               <div className="bg-gray-50 rounded-xl p-4 mb-5 border border-gray-100">
                 <div className="flex items-center justify-between">
                   {STATUS_STEPS.map((step, i) => {
-                    const isDone = i <= currentStepIndex;
-                    const isCurrent = i === currentStepIndex;
+                    const isDone = i <= stepIndex;
+                    const isCurrent = i === stepIndex;
                     const Icon = step.icon;
                     return (
                       <div key={step.key} className="flex-1 flex flex-col items-center relative">
                         {i > 0 && (
                           <div
                             className={`absolute right-1/2 top-4 w-full h-0.5 -z-0 ${
-                              i <= currentStepIndex ? 'bg-[#7a1d1d]' : 'bg-gray-200'
+                              i <= stepIndex ? 'bg-[#7a1d1d]' : 'bg-gray-200'
                             }`}
                           />
                         )}

@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapPin } from 'lucide-react';
+import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapPin, RotateCcw } from 'lucide-react';
 import { fetchMyOrders, type CustomerOrder } from '@/app/lib/customerOrders';
 import { useUser } from '@/app/context/UserContext';
 import { supabase } from '@/app/lib/supabase';
 
 interface MyOrdersScreenProps {
   onBack: () => void;
+  onOrderAgain?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Package; color: string; bg: string }> = {
@@ -27,7 +28,7 @@ function formatDate(iso: string) {
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function MyOrdersScreen({ onBack }: MyOrdersScreenProps) {
+export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
   const { userId } = useUser();
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,6 +137,18 @@ export function MyOrdersScreen({ onBack }: MyOrdersScreenProps) {
                     )}
                     <span className="font-bold text-sm text-[#7a1d1d]">GH₵{order.total_amount}</span>
                   </div>
+
+                  {onOrderAgain && (
+                    <div className="flex justify-end pt-2">
+                      <button
+                        onClick={onOrderAgain}
+                        className="flex items-center gap-1.5 bg-[#7a1d1d]/5 text-[#7a1d1d] font-bold text-xs px-3 py-2 rounded-xl active:scale-95 transition-transform hover:bg-[#7a1d1d]/10"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Order Again
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               );
             })}

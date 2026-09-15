@@ -11,20 +11,18 @@ import { BuildWaakyeScreen } from '@/app/components/screens/BuildWaakyeScreen';
 import { SBlinkspage } from '@/app/components/screens/SBlinkspage';
 import { OrderSummaryScreen } from '@/app/components/screens/OrderSummaryScreen';
 import { ConfirmationScreen } from '@/app/components/screens/ConfirmationScreen';
-import { OrderHistoryScreen } from '@/app/components/screens/OrderHistoryScreen';
-import { UsernameScreen } from '@/app/components/screens/UsernameScreen';
+import { MyOrdersScreen } from '@/app/components/screens/MyOrdersScreen';import { UsernameScreen } from '@/app/components/screens/UsernameScreen';
 import { VendorSelectScreen } from '@/app/components/screens/VendorSelectScreen';
 import { MyOrdersScreen } from '@/app/components/screens/MyOrdersScreen';
 import { useUser } from '@/app/context/UserContext';
 import { CartProvider, useCart } from '@/app/context/CartContext';
 import { VendorProvider, useVendor } from '@/app/context/VendorContext';
 import { FloatingCartButton } from '@/app/components/FloatingCartButton';
-import { saveOrder } from '@/app/utils/orderHistory';
 import { createOrder } from '@/app/lib/orders';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 import { Toaster, toast } from 'sonner';
 
-type Screen = 'landing' | 'home' | 'itemDetail' | 'closed' | 'build' | 'build2' | 'summary' | 'confirm' | 'history' | 'myOrders';
+type Screen = 'landing' | 'home' | 'itemDetail' | 'closed' | 'build' | 'build2' | 'summary' | 'confirm' | 'myOrders';
 type OrderType = 'waakye' | 'breakfast';
 
 // CartProvider has to sit above everything that calls useCart(), so App itself
@@ -152,13 +150,16 @@ function AppContent() {
 
   function handleOrderDone() {
     clearCart();
-    setCurrentScreen('history');
+    // Single order-history destination: MyOrdersScreen reads live Supabase
+    // data with realtime status updates. The duplicate OrderHistoryScreen
+    // (same table, no live updates) was removed — see AUDIT.md P2.
+    setCurrentScreen('myOrders');
   }
 
   const handleTimerComplete = () => setCurrentScreen('closed');
 
   const renderScreen = () => {
-    if (!orderingStatus.isOpen && !['closed', 'confirm', 'history', 'myOrders'].includes(currentScreen)){
+    if (!orderingStatus.isOpen && !['closed', 'confirm', 'myOrders'].includes(currentScreen)){
       return <ClosedScreen timeUntilOpen={orderingStatus.timeUntilOpen} />;
     }
 
@@ -184,7 +185,17 @@ function AppContent() {
         );
 
       case 'myOrders':
-        return <MyOrdersScreen onBack={() => setCurrentScreen('home')} />;
+        return (
+          <MyOrdersScreen
+            onBack={() => setCurrentScreen('home')}
+            onOrderAgain={() => {
+              // "Order again" opens a fresh builder — the builder fetches
+              // fresh menu data rather than accepting a prefilled order.
+              setOrderType('waakye');
+              setCurrentScreen('build');
+            }}
+          />
+        );
 
       case 'itemDetail':
         if (!selectedItem) {
@@ -238,28 +249,7 @@ function AppContent() {
         return (
           <ConfirmationScreen
             orderId={lastOrderId}
-            onSaveOrder={saveOrder}
             onDone={handleOrderDone}
-          />
-        );
-
-      case 'history':
-        return (
-          <OrderHistoryScreen
-            onOrderAgain={(storedOrder) => {
-              if (storedOrder.type === 'breakfast') {
-                setBreakfastOrder(storedOrder);
-                setOrderType('breakfast');
-                setCurrentScreen('build2');
-              } else {
-                // NOTE: BuildWaakyeScreen no longer accepts a prefilled order
-                // (it's self-contained now, fetching from vendor_menu_items),
-                // so "order again" just opens a fresh builder instead of
-                // restoring the previous selection. Known gap, not fixed yet.
-                setOrderType('waakye');
-                setCurrentScreen('build');
-              }
-            }}
           />
         );
 
