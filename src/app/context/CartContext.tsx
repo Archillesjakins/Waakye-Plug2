@@ -39,6 +39,11 @@ interface CartContextType {
   setCustomerPhone: (phone: string) => void;
   customerLocation: string;
   setCustomerLocation: (loc: string) => void;
+  /** Customer-confirmed dropoff pin (rider nav source of truth). */
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  setDeliveryCoords: (lat: number, lng: number) => void;
+  clearDeliveryCoords: () => void;
   paymentMethod: PaymentMethod;
   setPaymentMethod: (method: PaymentMethod) => void;
 
@@ -61,6 +66,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerLocation, setCustomerLocation] = useState('');
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
 
   const addToCart = (vendorId: string, items: OrderLineItem[]) => {
@@ -78,11 +85,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const removeLine = (id: string) => setLines((prev) => prev.filter((line) => line.id !== id));
 
+  const setDeliveryCoords = (lat: number, lng: number) => {
+    setDeliveryLat(lat);
+    setDeliveryLng(lng);
+  };
+
+  const clearDeliveryCoords = () => {
+    setDeliveryLat(null);
+    setDeliveryLng(null);
+  };
+
   const clearCart = () => {
     setLines([]);
     setDeliveryMode('delivery');
     setCustomerPhone('');
     setCustomerLocation('');
+    setDeliveryLat(null);
+    setDeliveryLng(null);
     setPaymentMethod('cash');
   };
 
@@ -100,6 +119,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         deliveryMode, toggleDeliveryMode,
         customerPhone, setCustomerPhone,
         customerLocation, setCustomerLocation,
+        deliveryLat, deliveryLng, setDeliveryCoords, clearDeliveryCoords,
         paymentMethod, setPaymentMethod,
         itemsSubtotal, totalItems, totalPrice,
       }}

@@ -18,7 +18,8 @@ export function flattenCartItems(lines: CartLine[]) {
   return Object.values(merged);
 }
 
-// Delivery-only — there's no pickup, so every order needs a real address.
+// Delivery-only — there's no pickup, so every order needs a real address
+// and a customer-confirmed GPS pin (delivery_lat / delivery_lng) for rider nav.
 export async function createOrder({
   customerId,
   vendorId,
@@ -26,6 +27,8 @@ export async function createOrder({
   totalAmount,
   deliveryAddress,
   paymentMethod,
+  deliveryLat,
+  deliveryLng,
 }: {
   customerId: string;
   vendorId: string;
@@ -33,6 +36,8 @@ export async function createOrder({
   totalAmount: number;
   deliveryAddress: string;
   paymentMethod: 'cash' | 'momo';
+  deliveryLat: number;
+  deliveryLng: number;
 }) {
   const items = flattenCartItems(lines);
 
@@ -46,6 +51,8 @@ export async function createOrder({
       delivery_mode: 'delivery',
       delivery_address: deliveryAddress,
       payment_method: paymentMethod,
+      delivery_lat: deliveryLat,
+      delivery_lng: deliveryLng,
       status: 'available',
     })
     .select()

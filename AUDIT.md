@@ -141,3 +141,11 @@ Lumora decision: tracker shows **friendly labels mapped to the real statuses** (
 **Verification:** `scripts/syntax-gate.cjs` — 75 files parsed, 0 failed. **Production build ✅ SUCCEEDED 2026-09-15 ~01:00** (2nd attempt; 1st wedged mid-transform at 0.48 GB free RAM — playbook confirms retry pattern works): fresh `dist/assets/index-CU_s9DH_.js` (613kB, down from 630kB — dead-code removal shows in the bundle) + `index-5NNaxt36.css` (104kB). Chunk-size warning unchanged (known pre-launch item: code splitting).
 
 **Still needing Lumora's decision:** P3 (breakfast flow scope), P4 (opening-hours window vs always-open).
+
+### 2026-09-16 — Uber-style delivery coordinates at checkout ✅ code complete — ⚠️ migration apply pending
+Customer dropoff pin is now first-class on orders (rider nav source of truth), not text-only address:
+
+- **Migration** `schema/migrations/2026-09-16_order_delivery_coords.sql` — adds `orders.delivery_lat` / `orders.delivery_lng` (`double precision`) with comments. **Must be applied on live Supabase before merge/deploy.**
+- **`createOrder`** (`src/app/lib/orders.ts`) accepts + inserts `delivery_lat` / `delivery_lng`.
+- **Checkout** `OrderSummaryScreen`: high-accuracy geolocation (`enableHighAccuracy: true`); warns if accuracy > ~250m (Precise Location copy); Leaflet map + draggable burgundy (`#7a1d1d`) pin; default center **Ho** `6.6008, 0.4713` (never Accra); coords required before Confirm; passed through CartContext into `createOrder` with address/phone/payment.
+- Deps: `leaflet` + `@types/leaflet`. Types: optional `deliveryLat`/`deliveryLng` on `OrderItem`.
