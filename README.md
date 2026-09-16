@@ -1,10 +1,9 @@
 # Waakye Plug — Customer App (`Waakye-Plug2`)
 
-Customer-facing ordering web app for Waakye Plug (Accra morning waakye delivery). Users pick a nearby vendor, build a bowl / add menu items, checkout for delivery, and track order status in realtime.
+Customer-facing ordering web app for Waakye Plug — Ghanaian waakye / food delivery. Users pick a nearby vendor (geo-filtered within **6 km**), build a bowl / add menu items, checkout for delivery, and track order status in realtime. Live testing and ops are centered on **Ho, Volta Region** (not exclusively Accra); do not assume broader city coverage beyond that.
 
 **Live:** https://waakye-plug2.vercel.app  
-**Upstream:** [Spidey2342/Waakye-Plug2](https://github.com/Spidey2342/Waakye-Plug2)  
-**Docs PRs:** open from fork [Archillesjakins/Waakye-Plug2](https://github.com/Archillesjakins/Waakye-Plug2) (upstream is pull-only for this account)  
+**Repo:** [Spidey2342/Waakye-Plug2](https://github.com/Spidey2342/Waakye-Plug2)  
 **Shared Supabase:** `verncapitxzsgcughvil`
 
 ## Platform siblings
