@@ -1,9 +1,11 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { useState } from 'react';
-import { ChevronLeft, Minus, Plus, Trash2, Banknote, Smartphone } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronLeft, Minus, Plus, Trash2, Banknote, Smartphone, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 import { useCart, CartLine, lineUnitPrice } from '@/app/context/CartContext';
 import { DELIVERY_FEE, SERVICE_FEE } from '@/app/types/orderTypes';
@@ -13,56 +15,187 @@ interface OrderSummaryScreenProps {
   onConfirm: () => void;
 }
 
+/** Ho (Volta Region) — default map center / GPS fallback. Never Accra. */
+const HO_DEFAULT = { lat: 6.6008, lng: 0.4713 };
+/** GPS accuracy worse than this (meters) → warn + Precise Location copy. */
+const MAX_ACCURACY_M = 250;
+const BRAND = '#7a1d1d';
+
+function makeDropPinIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:28px;height:28px;border-radius:50% 50% 50% 0;
+      background:${BRAND};border:3px solid white;
+      box-shadow:0 2px 8px rgba(0,0,0,0.45);
+      transform:rotate(-45deg);
+    "></div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+  });
+}
+
 export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProps) {
   const {
     lines, updateQuantity, removeLine,
     customerPhone, setCustomerPhone,
     customerLocation, setCustomerLocation,
+    deliveryLat, deliveryLng, setDeliveryCoords,
     paymentMethod, setPaymentMethod,
     itemsSubtotal, totalPrice,
   } = useCart();
 
   const [locating, setLocating] = useState(false);
-  const detectLocation = () => {
+  const [accuracyWarning, setAccuracyWarning] = useState<string | null>(null);
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'ok' | 'fallback'>('idle');
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const userDraggedRef = useRef(false);
+  const setDeliveryCoordsRef = useRef(setDeliveryCoords);
+  setDeliveryCoordsRef.current = setDeliveryCoords;
+
+  const applyCoords = useCallback((lat: number, lng: number, opts?: { pan?: boolean }) => {
+    setDeliveryCoordsRef.current(lat, lng);
+    if (markerRef.current) {
+      markerRef.current.setLatLng([lat, lng]);
+    }
+    if (opts?.pan !== false && mapRef.current) {
+      mapRef.current.setView([lat, lng], Math.max(mapRef.current.getZoom(), 16));
+    }
+  }, []);
+
+  // Init Leaflet map once (Ho default until a good GPS fix arrives).
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+
+    const map = L.map(mapContainerRef.current, {
+      zoomControl: true,
+      attributionControl: true,
+    }).setView([HO_DEFAULT.lat, HO_DEFAULT.lng], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    const marker = L.marker([HO_DEFAULT.lat, HO_DEFAULT.lng], {
+      draggable: true,
+      icon: makeDropPinIcon(),
+    }).addTo(map);
+
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng();
+      userDraggedRef.current = true;
+      setDeliveryCoordsRef.current(pos.lat, pos.lng);
+      setAccuracyWarning(null);
+    });
+
+    mapRef.current = map;
+    markerRef.current = marker;
+
+    // If coords were already set (e.g. revisiting summary), restore pin.
+    // Otherwise seed Ho as the starting pin so submit always has a lat/lng
+    // once the user confirms (they can still drag).
+    // We intentionally do NOT auto-commit Ho into cart until GPS/drag —
+    // require an explicit GPS fix or user drag so Accra-style wrong pins
+    // are never silently accepted as "confirmed".
+    // Invalidate size after layout so tiles render in flex containers.
+    requestAnimationFrame(() => {
+      map.invalidateSize();
+    });
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+    };
+  }, []);
+
+  const reverseGeocodeAndFill = useCallback(async (latitude: number, longitude: number) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+        { headers: { 'User-Agent': 'WaakyePlug/1.0' } }
+      );
+      if (!res.ok) throw new Error('Reverse geocode failed');
+      const data = await res.json();
+      const address = data?.display_name as string | undefined;
+      const mapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+      setCustomerLocation(address ? `${address}\n🗺️ ${mapsLink}` : `${latitude}, ${longitude}\n🗺️ ${mapsLink}`);
+    } catch {
+      const mapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+      setCustomerLocation(`${latitude}, ${longitude}\n🗺️ ${mapsLink}`);
+    }
+  }, [setCustomerLocation]);
+
+  const handleGpsFix = useCallback((position: GeolocationPosition, fromButton: boolean) => {
+    const { latitude, longitude, accuracy } = position.coords;
+    const acc = typeof accuracy === 'number' ? accuracy : Number.POSITIVE_INFINITY;
+
+    // Don't yank the pin if the customer already placed it by hand
+    // (late GPS callbacks after a drag are common on mobile).
+    if (userDraggedRef.current && !fromButton) {
+      setGpsStatus('ok');
+      return;
+    }
+    if (fromButton) {
+      userDraggedRef.current = false;
+    }
+
+    if (acc > MAX_ACCURACY_M) {
+      setAccuracyWarning(
+        `Location accuracy is ~${Math.round(acc)}m — too coarse for delivery. Turn on Precise Location in your browser/device settings, then tap Use my location again — or drag the pin to your exact dropoff.`
+      );
+      toast.warning('Precise Location needed — drag the pin or retry GPS');
+      // Still move the pin so the customer can refine by dragging.
+      applyCoords(latitude, longitude);
+      setGpsStatus('ok');
+      void reverseGeocodeAndFill(latitude, longitude);
+      return;
+    }
+
+    setAccuracyWarning(null);
+    applyCoords(latitude, longitude);
+    setGpsStatus('ok');
+    void reverseGeocodeAndFill(latitude, longitude);
+    if (fromButton) toast.success('Dropoff pin set from GPS — drag to fine-tune');
+  }, [applyCoords, reverseGeocodeAndFill]);
+
+  const requestLocation = useCallback((fromButton: boolean) => {
     if (!navigator.geolocation) {
       toast.error('Geolocation not supported on this device');
+      setGpsStatus('fallback');
       return;
     }
     setLocating(true);
+    setGpsStatus('locating');
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
-            {
-              headers: {
-                'User-Agent': 'WaakyePlug/1.0',
-              },
-            }
-          );
-
-          if (!res.ok) throw new Error('Reverse geocode failed');
-
-          const data = await res.json();
-          const address = data?.display_name;
-          const mapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
-
-          setCustomerLocation(address ? `${address}\n🗺️ ${mapsLink}` : `${latitude}, ${longitude}\n🗺️ ${mapsLink}`);
-        } catch {
-          const mapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
-          setCustomerLocation(`${latitude}, ${longitude}\n🗺️ ${mapsLink}`);
-        } finally {
-          setLocating(false);
-        }
+      (position) => {
+        handleGpsFix(position, fromButton);
+        setLocating(false);
       },
       () => {
-        toast.error('Unable to fetch location. Please enter manually.');
+        toast.error('Unable to fetch location. Drag the pin on the map (Ho default).');
         setLocating(false);
-      }
+        setGpsStatus('fallback');
+        // Seed Ho pin into cart only after failed GPS so the map has a
+        // confirmed starting point the user can drag.
+        applyCoords(HO_DEFAULT.lat, HO_DEFAULT.lng);
+        setAccuracyWarning(
+          'GPS unavailable — map is centered on Ho. Drag the burgundy pin to your exact dropoff before confirming.'
+        );
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
-  };
+  }, [applyCoords, handleGpsFix]);
+
+  // Auto-request high-accuracy GPS on mount.
+  useEffect(() => {
+    requestLocation(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once on mount
+  }, []);
 
   const formatTo233 = (phone: string) => {
     const cleaned = phone.replace(/\D/g, '').trim();
@@ -76,11 +209,26 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
 
   const isEmpty = lines.length === 0;
 
-  // Delivery is the only mode — no pickup, so a real address is always
-  // required. A single word or a few random characters won't count; it'd
-  // fail to geocode on the rider's end and strand the order.
+  // Delivery is the only mode — need a usable address text AND a confirmed pin.
   const hasUsableAddress = customerLocation.trim().length >= 8;
-  const canSubmit = !!customerPhone && hasUsableAddress;
+  const hasCoords =
+    typeof deliveryLat === 'number' &&
+    typeof deliveryLng === 'number' &&
+    Number.isFinite(deliveryLat) &&
+    Number.isFinite(deliveryLng);
+  const canSubmit = !!customerPhone && hasUsableAddress && hasCoords;
+
+  const handleConfirmClick = () => {
+    if (!hasCoords) {
+      toast.error('Set your dropoff pin on the map before confirming.');
+      return;
+    }
+    if (!hasUsableAddress) {
+      toast.error('Add a delivery address description so the rider can find you.');
+      return;
+    }
+    onConfirm();
+  };
 
   return (
     <div className="min-h-[100dvh] bg-[#fefaf4] flex flex-col [webkit-tap-highlight-color:transparent]">
@@ -172,7 +320,7 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
                 + Add another item
               </button>
 
-              {/* ── Payment method — required for the real order write ── */}
+              {/* ── Payment method ── */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -205,7 +353,7 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
                 </div>
               </motion.div>
 
-              {/* ── Contact + delivery details — always shown, delivery is the only mode ── */}
+              {/* ── Contact + delivery pin ── */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -227,13 +375,46 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium text-gray-700">Delivery Location</label>
-                    <button onClick={detectLocation} disabled={locating} className="text-xs font-bold text-[#7a1d1d] hover:underline disabled:opacity-50">
-                      {locating ? 'Locating…' : 'Auto-detect'}
+                    <label className="block text-sm font-medium text-gray-700">Dropoff pin</label>
+                    <button
+                      type="button"
+                      onClick={() => requestLocation(true)}
+                      disabled={locating}
+                      className="text-xs font-bold text-[#7a1d1d] hover:underline disabled:opacity-50"
+                    >
+                      {locating || gpsStatus === 'locating' ? 'Locating…' : 'Use my location'}
                     </button>
                   </div>
+                  <p className="text-xs text-gray-500 mb-2 flex items-start gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#7a1d1d]" />
+                    Drag the burgundy pin to where the rider should deliver. Default city: Ho (Volta).
+                  </p>
+                  <div
+                    ref={mapContainerRef}
+                    className="w-full h-56 rounded-xl overflow-hidden border border-gray-200 z-0"
+                    style={{ minHeight: 224 }}
+                  />
+                  {hasCoords && (
+                    <p className="text-[11px] text-gray-400 mt-1 font-mono">
+                      {deliveryLat!.toFixed(5)}, {deliveryLng!.toFixed(5)}
+                    </p>
+                  )}
+                  {accuracyWarning && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                      {accuracyWarning}
+                    </p>
+                  )}
+                  {!hasCoords && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Set your dropoff pin (GPS or drag) before confirming the order.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Delivery Location (notes)</label>
                   <textarea
-                    placeholder="Describe your location or use auto-detect"
+                    placeholder="Landmark / house description (helps the rider)"
                     value={customerLocation}
                     onChange={(e) => setCustomerLocation(e.target.value)}
                     className="w-full border border-gray-200 rounded-xl p-3 focus:border-[#7a1d1d] outline-none text-sm"
@@ -251,7 +432,7 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
                 transition={{ delay: 0.3 }}
                 className="text-xs text-gray-400 text-center px-2"
               >
-                📝 Your order goes straight to the vendor — they'll confirm delivery details with you directly.
+                📍 Your confirmed pin is what the rider navigates to — drag it carefully.
               </motion.p>
             </div>
           </div>
@@ -277,7 +458,7 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
                 </div>
               </div>
               <button
-                onClick={onConfirm}
+                onClick={handleConfirmClick}
                 disabled={!canSubmit}
                 className={`w-full py-4 rounded-2xl font-bold text-lg transition-colors ${
                   !canSubmit
@@ -293,4 +474,4 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
       )}
     </div>
   );
-} 
+}

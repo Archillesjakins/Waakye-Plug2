@@ -39,7 +39,7 @@ export default function App() {
 
 function AppContent() {
   const { hasUser, userId, phone, username, ready } = useUser();
-  const { addToCart, clearCart, itemsSubtotal, lines, deliveryMode, customerLocation, paymentMethod, totalPrice } = useCart();
+  const { addToCart, clearCart, itemsSubtotal, lines, deliveryMode, customerLocation, deliveryLat, deliveryLng, paymentMethod, totalPrice } = useCart();
   const { selectedVendor, clearVendor } = useVendor();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
@@ -130,6 +130,16 @@ function AppContent() {
     if (!selectedVendor) return;
 
     try {
+      if (
+        typeof deliveryLat !== 'number' ||
+        typeof deliveryLng !== 'number' ||
+        !Number.isFinite(deliveryLat) ||
+        !Number.isFinite(deliveryLng)
+      ) {
+        toast.error('Set your dropoff pin on the map before confirming.');
+        return;
+      }
+
       const created = await createOrder({
         customerId: userId,
         vendorId: selectedVendor.id,
@@ -137,6 +147,8 @@ function AppContent() {
         totalAmount: totalPrice,
         deliveryAddress: customerLocation,
         paymentMethod,
+        deliveryLat,
+        deliveryLng,
       });
       setLastOrderId(created.id);
     } catch (e) {

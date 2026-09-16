@@ -30,6 +30,9 @@ export interface OrderItem {
   deliveryMode: 'delivery';
   customerPhone?: string;
   customerLocation?: string;
+  /** Customer-confirmed dropoff GPS pin (orders.delivery_lat / delivery_lng). */
+  deliveryLat?: number;
+  deliveryLng?: number;
 }
 export interface Breakfast {
   drink: Sbreakfast;
