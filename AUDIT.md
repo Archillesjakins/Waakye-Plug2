@@ -154,3 +154,10 @@ Customer dropoff pin is now first-class on orders (rider nav source of truth), n
 Root cause of rider missing customer pin (E2E order *Sunshine Waakye* / Near Awatime Junction @ ~15:12 UTC had NULL coords): `OrderSummaryScreen` drew a Ho default Leaflet pin but **intentionally did not** `setDeliveryCoords` until GPS succeeded or the user dragged. If geolocation hung/failed silently, the map still looked “pinned” while cart coords stayed null — a footgun even with App.tsx’s finite-coords gate.
 
 **Fix (Uber-style):** on map init, after creating the restored-or-Ho marker, immediately `setDeliveryCoords` to that pin’s lat/lng so cart always has finite coords. GPS can still refine when accuracy is good; drag still nudges. Accuracy >250m warning remains advisory (does not block submit once coords exist). Reconfirmed: `App.tsx` still refuses `createOrder` without finite `deliveryLat`/`deliveryLng`; `orders.ts` insert still writes `delivery_lat` / `delivery_lng`.
+
+## 2026-09-18 — Rider location GRANTs
+
+- Added `schema/migrations/2026-09-18_rider_location_grants.sql` to version live
+  `GRANT UPDATE (current_lat, current_lng, location_updated_at)` on `riders` for
+  `authenticated` (needed after login for GPS). Apply in Supabase SQL Editor;
+  do not re-run `2026-09-12_rls_lockdown.sql` as-is without these grants.
