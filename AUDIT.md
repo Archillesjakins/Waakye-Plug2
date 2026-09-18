@@ -149,3 +149,8 @@ Customer dropoff pin is now first-class on orders (rider nav source of truth), n
 - **`createOrder`** (`src/app/lib/orders.ts`) accepts + inserts `delivery_lat` / `delivery_lng`.
 - **Checkout** `OrderSummaryScreen`: high-accuracy geolocation (`enableHighAccuracy: true`); warns if accuracy > ~250m (Precise Location copy); Leaflet map + draggable burgundy (`#7a1d1d`) pin; default center **Ho** `6.6008, 0.4713` (never Accra); coords required before Confirm; passed through CartContext into `createOrder` with address/phone/payment.
 - Deps: `leaflet` + `@types/leaflet`. Types: optional `deliveryLat`/`deliveryLng` on `OrderItem`.
+
+### 2026-09-18 — Checkout pin always commits delivery_lat/lng ✅
+Root cause of rider missing customer pin (E2E order *Sunshine Waakye* / Near Awatime Junction @ ~15:12 UTC had NULL coords): `OrderSummaryScreen` drew a Ho default Leaflet pin but **intentionally did not** `setDeliveryCoords` until GPS succeeded or the user dragged. If geolocation hung/failed silently, the map still looked “pinned” while cart coords stayed null — a footgun even with App.tsx’s finite-coords gate.
+
+**Fix (Uber-style):** on map init, after creating the restored-or-Ho marker, immediately `setDeliveryCoords` to that pin’s lat/lng so cart always has finite coords. GPS can still refine when accuracy is good; drag still nudges. Accuracy >250m warning remains advisory (does not block submit once coords exist). Reconfirmed: `App.tsx` still refuses `createOrder` without finite `deliveryLat`/`deliveryLng`; `orders.ts` insert still writes `delivery_lat` / `delivery_lng`.

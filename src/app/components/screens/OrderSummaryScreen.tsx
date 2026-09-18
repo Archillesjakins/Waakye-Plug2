@@ -70,17 +70,28 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
+    // Uber-style: whatever pin is on the map is immediately the cart pin.
+    // Restore prior coords if revisiting summary; otherwise start at Ho.
+    // GPS (if accurate) and user drag can still refine afterward.
+    const restored =
+      typeof deliveryLat === 'number' &&
+      typeof deliveryLng === 'number' &&
+      Number.isFinite(deliveryLat) &&
+      Number.isFinite(deliveryLng);
+    const startLat = restored ? deliveryLat : HO_DEFAULT.lat;
+    const startLng = restored ? deliveryLng : HO_DEFAULT.lng;
+
     const map = L.map(mapContainerRef.current, {
       zoomControl: true,
       attributionControl: true,
-    }).setView([HO_DEFAULT.lat, HO_DEFAULT.lng], 14);
+    }).setView([startLat, startLng], 14);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
     }).addTo(map);
 
-    const marker = L.marker([HO_DEFAULT.lat, HO_DEFAULT.lng], {
+    const marker = L.marker([startLat, startLng], {
       draggable: true,
       icon: makeDropPinIcon(),
     }).addTo(map);
@@ -95,12 +106,10 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
     mapRef.current = map;
     markerRef.current = marker;
 
-    // If coords were already set (e.g. revisiting summary), restore pin.
-    // Otherwise seed Ho as the starting pin so submit always has a lat/lng
-    // once the user confirms (they can still drag).
-    // We intentionally do NOT auto-commit Ho into cart until GPS/drag —
-    // require an explicit GPS fix or user drag so Accra-style wrong pins
-    // are never silently accepted as "confirmed".
+    // Commit pin → cart immediately so delivery_lat/lng cannot stay NULL
+    // when GPS callbacks hang/fail silently (map pin without cart state).
+    setDeliveryCoordsRef.current(startLat, startLng);
+
     // Invalidate size after layout so tiles render in flex containers.
     requestAnimationFrame(() => {
       map.invalidateSize();
@@ -111,6 +120,8 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
       mapRef.current = null;
       markerRef.current = null;
     };
+    // Map init once; start lat/lng snapshotted from mount (restore or Ho).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reverseGeocodeAndFill = useCallback(async (latitude: number, longitude: number) => {
@@ -209,7 +220,9 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
 
   const isEmpty = lines.length === 0;
 
-  // Delivery is the only mode — need a usable address text AND a confirmed pin.
+  // Delivery is the only mode — need a usable address text AND finite pin coords.
+  // Accuracy >250m shows a warning but does NOT block submit once coords exist
+  // (user may drag or accept the pin as-is).
   const hasUsableAddress = customerLocation.trim().length >= 8;
   const hasCoords =
     typeof deliveryLat === 'number' &&
