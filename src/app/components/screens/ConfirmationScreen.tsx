@@ -100,7 +100,7 @@ export function ConfirmationScreen({ orderId, onDone }: ConfirmationScreenProps)
     rider_assigned: { title: 'Rider Assigned!', icon: Check, sub: 'Your rider has the order \u2014 food is on its way soon.' },
     picked_up: { title: 'On the Way!', icon: Bike, sub: 'Your rider has picked it up \u2014 keep your phone close.' },
     delivered: { title: 'Delivered!', icon: Home, sub: 'Enjoy your waakye \u2014 thanks for ordering!' },
-    cancelled: { title: 'Order Cancelled', icon: XCircle, sub: 'The vendor cancelled this order. Reach out to them directly if you\u2019re not sure why.' },
+    cancelled: { title: 'Order Cancelled', icon: XCircle, sub: 'This order was cancelled. Reach out to the vendor or support if you\u2019re not sure why.' },
   };
   const header = HEADER_COPY[status] ?? HEADER_COPY.available;
   const HeaderIcon = header.icon;
@@ -120,7 +120,7 @@ export function ConfirmationScreen({ orderId, onDone }: ConfirmationScreenProps)
               </div>
               <h1 className="text-2xl font-bold text-center mb-1.5">Order Cancelled</h1>
               <p className="text-gray-500 text-center text-sm mb-5">
-                The vendor cancelled this order. Reach out to them directly if you're not sure why.
+                This order was cancelled. Reach out to the vendor or support if you're not sure why.
               </p>
             </>
           ) : (

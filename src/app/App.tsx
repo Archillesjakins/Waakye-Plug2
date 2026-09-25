@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { checkOrderingStatus } from '@/app/utils/timeUtils';
-import { Breakfast } from '@/app/types/orderTypes';
+import { Breakfast, DELIVERY_FEE } from '@/app/types/orderTypes';
 import { LandingScreen } from '@/app/components/screens/LandingScreen';
 import { HomeScreen } from '@/app/components/screens/HomeScreen';
 import { ItemDetailScreen } from '@/app/components/screens/ItemDetailScreen';
@@ -39,7 +39,7 @@ export default function App() {
 
 function AppContent() {
   const { hasUser, userId, phone, username, ready } = useUser();
-  const { addToCart, clearCart, itemsSubtotal, lines, deliveryMode, customerLocation, paymentMethod, totalPrice } = useCart();
+  const { addToCart, clearCart, itemsSubtotal, lines, deliveryMode, customerLocation, paymentMethod, totalPrice, setPendingDeliveryFeeOwed } = useCart();
   const { selectedVendor, clearVendor } = useVendor();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
@@ -137,6 +137,7 @@ function AppContent() {
         totalAmount: totalPrice,
         deliveryAddress: customerLocation,
         paymentMethod,
+        deliveryFee: DELIVERY_FEE,
       });
       setLastOrderId(created.id);
     } catch (e) {
