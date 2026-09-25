@@ -26,6 +26,7 @@ export async function createOrder({
   totalAmount,
   deliveryAddress,
   paymentMethod,
+  deliveryFee,
 }: {
   customerId: string;
   vendorId: string;
@@ -33,6 +34,7 @@ export async function createOrder({
   totalAmount: number;
   deliveryAddress: string;
   paymentMethod: 'cash' | 'momo';
+  deliveryFee: number;
 }) {
   const items = flattenCartItems(lines);
 
@@ -47,6 +49,7 @@ export async function createOrder({
       delivery_address: deliveryAddress,
       payment_method: paymentMethod,
       status: 'available',
+      delivery_fee: deliveryFee,
     })
     .select()
     .single();

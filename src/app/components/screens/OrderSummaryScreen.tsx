@@ -1,12 +1,14 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronLeft, Minus, Plus, Trash2, Banknote, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 import { useCart, CartLine, lineUnitPrice } from '@/app/context/CartContext';
 import { DELIVERY_FEE, SERVICE_FEE } from '@/app/types/orderTypes';
+import { supabase } from '@/app/lib/supabase';
+import { useUser } from '@/app/context/UserContext';
 
 interface OrderSummaryScreenProps {
   onBack: () => void;
@@ -20,9 +22,31 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
     customerLocation, setCustomerLocation,
     paymentMethod, setPaymentMethod,
     itemsSubtotal, totalPrice,
+    pendingDeliveryFeeOwed, setPendingDeliveryFeeOwed,
   } = useCart();
+  const { userId } = useUser();
 
   const [locating, setLocating] = useState(false);
+
+  // Fetch pending delivery fee owed on mount
+  useEffect(() => {
+    if (!userId) return;
+
+    supabase
+      .from('profiles')
+      .select('pending_delivery_fee_owed')
+      .eq('id', userId)
+      .single()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Could not fetch pending delivery fee:', error);
+          return;
+        }
+        if (data?.pending_delivery_fee_owed) {
+          setPendingDeliveryFeeOwed(Number(data.pending_delivery_fee_owed));
+        }
+      });
+  }, [userId, setPendingDeliveryFeeOwed]);
   const detectLocation = () => {
     if (!navigator.geolocation) {
       toast.error('Geolocation not supported on this device');
@@ -271,6 +295,17 @@ export function OrderSummaryScreen({ onBack, onConfirm }: OrderSummaryScreenProp
                   <span className="text-gray-500">Service Fee</span>
                   <span className="text-gray-700">GH₵{SERVICE_FEE}</span>
                 </div>
+                {pendingDeliveryFeeOwed > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-orange-600 font-medium">Outstanding Delivery Fee</span>
+                      <span className="text-orange-600 font-medium">GH₵{pendingDeliveryFeeOwed.toFixed(2)}</span>
+                    </div>
+                    <p className="text-xs text-orange-600 italic">
+                      From a previous cancelled order (applied to this order)
+                    </p>
+                  </>
+                )}
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                   <span className="font-bold">Total</span>
                   <span className="text-2xl font-bold text-[#7a1d1d]">GH₵{totalPrice}</span>

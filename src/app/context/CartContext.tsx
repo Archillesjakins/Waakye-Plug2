@@ -45,6 +45,8 @@ interface CartContextType {
   itemsSubtotal: number;
   totalItems: number;
   totalPrice: number;
+  pendingDeliveryFeeOwed: number;
+  setPendingDeliveryFeeOwed: (amount: number) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -62,6 +64,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerLocation, setCustomerLocation] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [pendingDeliveryFeeOwed, setPendingDeliveryFeeOwed] = useState(0);
 
   const addToCart = (vendorId: string, items: OrderLineItem[]) => {
     const id = `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -91,7 +94,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const totalItems = lines.reduce((sum, l) => sum + l.quantity, 0);
   const itemsSubtotal = lines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
   const totalPrice =
-    lines.length === 0 ? 0 : itemsSubtotal + (deliveryMode === 'delivery' ? DELIVERY_FEE : 0) + SERVICE_FEE;
+    lines.length === 0
+      ? 0
+      : itemsSubtotal + (deliveryMode === 'delivery' ? DELIVERY_FEE : 0) + SERVICE_FEE + pendingDeliveryFeeOwed;
 
   return (
     <CartContext.Provider
@@ -102,6 +107,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         customerLocation, setCustomerLocation,
         paymentMethod, setPaymentMethod,
         itemsSubtotal, totalItems, totalPrice,
+        pendingDeliveryFeeOwed, setPendingDeliveryFeeOwed,
       }}
     >
       {children}
