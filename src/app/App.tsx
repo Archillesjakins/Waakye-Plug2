@@ -220,6 +220,10 @@ function AppContent() {
         return (
           <MyOrdersScreen
             onBack={() => setCurrentScreen('home')}
+            onViewOrder={(id) => {
+              setLastOrderId(id);
+              setCurrentScreen('confirm');
+            }}
             onOrderAgain={() => {
               if (!guardOrderingAction()) return;
               setOrderType('waakye');
@@ -269,7 +273,13 @@ function AppContent() {
         );
 
       case 'confirm':
-        return <ConfirmationScreen orderId={lastOrderId} onDone={handleOrderDone} />;
+        return (
+          <ConfirmationScreen
+            orderId={lastOrderId}
+            onDone={handleOrderDone}
+            onBack={() => setCurrentScreen('home')}
+          />
+        );
 
       default:
         return (

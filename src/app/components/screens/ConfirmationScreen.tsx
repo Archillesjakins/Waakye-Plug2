@@ -1,72 +1,108 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Check, PartyPopper, Clock, Bike, Home, XCircle } from 'lucide-react';
-import { useCart, CartLine, lineUnitPrice } from '@/app/context/CartContext';
+import { ChevronLeft, Check, XCircle } from 'lucide-react';
+import { useCart } from '@/app/context/CartContext';
 import { supabase } from '@/app/lib/supabase';
+import { fetchOrderById, type CustomerOrder } from '@/app/lib/customerOrders';
+import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 
 interface ConfirmationScreenProps {
   orderId: string | null;
   onDone: () => void;
+  onBack?: () => void;
 }
 
-// The real status lifecycle, matching what the system actually writes:
-// customer inserts 'available'; rider app writes 'rider_assigned',
-// 'picked_up', 'delivered'; vendor app writes 'cancelled'. ('pending' /
-// 'accepted' / 'preparing' / 'ready' are ghosts — nothing in any app ever
-// wrote them.)
 type OrderStatus = 'available' | 'rider_assigned' | 'picked_up' | 'delivered' | 'cancelled';
 
-// Canonical steps shown in the tracker, in lifecycle order.
-const STATUS_STEPS: { key: OrderStatus; label: string; icon: any }[] = [
-  { key: 'available', label: 'Order Sent', icon: Clock },
-  { key: 'rider_assigned', label: 'Rider Assigned', icon: Check },
-  { key: 'picked_up', label: 'On the way', icon: Bike },
-  { key: 'delivered', label: 'Delivered', icon: Home },
+const TIMELINE_STEPS: {
+  label: string;
+  description: string;
+  /** Shown when this step is the current one (in progress). */
+  activeDescription: string;
+}[] = [
+  {
+    label: 'Order placed',
+    description: 'Your order was placed for delivery.',
+    activeDescription: 'We’re finding a rider for your order.',
+  },
+  {
+    label: 'Rider assigned',
+    description: 'A rider accepted your order.',
+    activeDescription: 'Your rider is heading to the vendor.',
+  },
+  {
+    label: 'On the way',
+    description: 'Your rider picked up the food.',
+    activeDescription: 'Your order is on the way — keep your phone close.',
+  },
+  {
+    label: 'Delivered',
+    description: 'Your order was delivered. Enjoy!',
+    activeDescription: 'Almost there…',
+  },
 ];
 
-// Legacy statuses an old row might still carry (pre-canonical-enum data).
-// Map them onto the closest real step so the tracker never shows a wrong
-// position; unknown statuses default to step 0.
-const LEGACY_STEP_INDEX: Record<string, number> = {
-  pending: 0,
-  accepted: 0,
-  preparing: 0,
-  ready: 0,
-};
+function statusToStepIndex(status: OrderStatus): number {
+  switch (status) {
+    case 'available':
+      return 0;
+    case 'rider_assigned':
+      return 1;
+    case 'picked_up':
+      return 2;
+    case 'delivered':
+      return 3;
+    default:
+      return 0;
+  }
+}
 
-export function ConfirmationScreen({ orderId, onDone }: ConfirmationScreenProps) {
+function formatStepTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+function stepTimestamp(order: CustomerOrder, stepIndex: number): string | null {
+  if (stepIndex === 0) return formatStepTime(order.created_at);
+  if (stepIndex === 1 && statusToStepIndex(order.status as OrderStatus) >= 1) {
+    return formatStepTime(order.updated_at);
+  }
+  if (stepIndex === 2) return formatStepTime(order.picked_up_at);
+  if (stepIndex === 3) return formatStepTime(order.delivered_at);
+  return null;
+}
+
+function shortOrderRef(id: string): string {
+  return id.replace(/-/g, '').slice(-4).toUpperCase();
+}
+
+export function ConfirmationScreen({ orderId, onDone, onBack }: ConfirmationScreenProps) {
   const { lines, totalPrice } = useCart();
+  const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [status, setStatus] = useState<OrderStatus>('available');
 
-  // Live status — subscribes to this specific order row and updates the
-  // instant the rider claims / picks up / delivers, or the vendor cancels.
-  // Requires realtime replication enabled on the orders table in Supabase.
   useEffect(() => {
     if (!orderId) return;
 
-    // Mount-time sync: if the user re-enters this screen (or reloads) after
-    // the order has already progressed, start from the real current status
-    // instead of always showing "Order Sent".
     let alive = true;
-    supabase
-      .from('orders')
-      .select('status')
-      .eq('id', orderId)
-      .single()
-      .then(({ data }) => {
-        if (alive && data?.status) setStatus(data.status as OrderStatus);
-      });
+
+    async function load() {
+      const row = await fetchOrderById(orderId);
+      if (!alive || !row) return;
+      setOrder(row);
+      setStatus(row.status as OrderStatus);
+    }
+
+    load();
 
     const channel = supabase
       .channel(`order-status-${orderId}`)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        (payload) => {
-          const next = (payload.new as any)?.status as OrderStatus | undefined;
-          if (next) setStatus(next);
+        () => {
+          load();
         }
       )
       .subscribe();
@@ -77,141 +113,144 @@ export function ConfirmationScreen({ orderId, onDone }: ConfirmationScreenProps)
     };
   }, [orderId]);
 
-  const baseItem = (line: CartLine) => line.items.find((i) => i.category === 'base' || i.category === 'combo');
-  const otherItems = (line: CartLine) => line.items.filter((i) => i.category !== 'base' && i.category !== 'combo');
+  const cancelled = status === 'cancelled';
+  const activeStep = cancelled ? 0 : statusToStepIndex(status);
 
-  const currentStepIndex = STATUS_STEPS.findIndex((s) => s.key === status);
+  const displayItems =
+    order?.items && order.items.length > 0
+      ? order.items
+      : lines.flatMap((line) =>
+          line.items.map((item) => ({
+            ...item,
+            quantity: item.quantity * line.quantity,
+          }))
+        );
 
-  // Step position for rendering: legacy statuses map through LEGACY_STEP_INDEX;
-  // unknown statuses default to step 0. 'cancelled' is handled separately.
-  const stepIndex =
-    currentStepIndex >= 0
-      ? currentStepIndex
-      : (LEGACY_STEP_INDEX[status] ?? 0);
-
-  function handleDone() {
-    onDone();
-  }
-
-  // Friendly, status-aware header copy so re-entering the screen late shows
-  // where things actually are, not a stale "Order Sent!".
-  const HEADER_COPY: Record<OrderStatus, { title: string; icon: any; sub: string }> = {
-    available: { title: 'Order Sent!', icon: PartyPopper, sub: 'We\u2019re lining up a rider \u2014 this updates live.' },
-    rider_assigned: { title: 'Rider Assigned!', icon: Check, sub: 'Your rider has the order \u2014 food is on its way soon.' },
-    picked_up: { title: 'On the Way!', icon: Bike, sub: 'Your rider has picked it up \u2014 keep your phone close.' },
-    delivered: { title: 'Delivered!', icon: Home, sub: 'Enjoy your waakye \u2014 thanks for ordering!' },
-    cancelled: { title: 'Order Cancelled', icon: XCircle, sub: 'The vendor cancelled this order. Reach out to them directly if you\u2019re not sure why.' },
-  };
-  const header = HEADER_COPY[status] ?? HEADER_COPY.available;
-  const HeaderIcon = header.icon;
+  const displayTotal = order?.total_amount ?? totalPrice;
+  const vendorName = order?.vendors?.business_name ?? 'Your order';
+  const paymentLabel =
+    order?.payment_method === 'momo' ? 'MoMo' : order?.payment_method === 'cash' ? 'Cash' : 'Paid';
 
   return (
-    <div className="min-h-[100dvh] bg-[#fefaf4] flex items-center justify-center px-4 py-6 [webkit-tap-highlight-color:transparent]">
-      <div className="max-w-md w-full pb-[env(safe-area-inset-bottom)]">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white rounded-3xl shadow-xl p-6 sm:p-8 will-change-transform"
-        >
-          {status === 'cancelled' ? (
-            <>
-              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5">
-                <XCircle className="w-8 h-8 text-red-500" />
-              </div>
-              <h1 className="text-2xl font-bold text-center mb-1.5">Order Cancelled</h1>
-              <p className="text-gray-500 text-center text-sm mb-5">
-                The vendor cancelled this order. Reach out to them directly if you're not sure why.
+    <div className="min-h-[100dvh] bg-[#fefaf4] flex flex-col [webkit-tap-highlight-color:transparent]">
+      {/* Header — full-width bar like reference “Order details” */}
+      <div className="bg-emerald-600 text-white px-4 pt-[max(env(safe-area-inset-top),12px)] pb-4 shadow-md">
+        <div className="max-w-md mx-auto flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack ?? onDone}
+            className="p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors"
+            aria-label="Back"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+          <h1 className="flex-1 text-center font-bold text-lg pr-8">Order details</h1>
+        </div>
+      </div>
+
+      <div className="flex-1 max-w-md mx-auto w-full px-4 py-6 pb-8">
+        {cancelled ? (
+          <div className="bg-white rounded-2xl border border-red-100 p-6 text-center mb-6">
+            <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+            <h2 className="font-bold text-lg text-gray-900">Order cancelled</h2>
+            <p className="text-sm text-gray-500 mt-2">The vendor cancelled this order. Contact them if you need help.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+            {orderId && (
+              <p className="text-xs text-gray-400 mb-4">
+                Order #{shortOrderRef(orderId)}
+                {order?.created_at ? ` · ${formatStepTime(order.created_at)}` : ''}
               </p>
-            </>
-          ) : (
-            <>
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2, type: 'spring' }}
-                className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5"
-              >
-                <HeaderIcon className="w-8 h-8 text-green-600" />
-              </motion.div>
+            )}
 
-              <h1 className="text-2xl font-bold text-center mb-1.5">
-                {header.title}
-              </h1>
-              <p className="text-gray-500 text-center text-sm mb-5">
-                {header.sub}
-              </p>
+            {/* Vertical timeline (reference-style) */}
+            <div className="relative pl-14">
+              {TIMELINE_STEPS.map((step, i) => {
+                const isComplete = i < activeStep || status === 'delivered';
+                const isCurrent = i === activeStep && status !== 'delivered' && !cancelled;
+                const isFuture = !isComplete && !isCurrent;
+                const time = order ? stepTimestamp(order, i) : i === 0 ? formatStepTime(new Date().toISOString()) : null;
+                const showTime = isComplete && time;
 
-              {/* ── Live status tracker ── */}
-              <div className="bg-gray-50 rounded-xl p-4 mb-5 border border-gray-100">
-                <div className="flex items-center justify-between">
-                  {STATUS_STEPS.map((step, i) => {
-                    const isDone = i <= stepIndex;
-                    const isCurrent = i === stepIndex;
-                    const Icon = step.icon;
-                    return (
-                      <div key={step.key} className="flex-1 flex flex-col items-center relative">
-                        {i > 0 && (
-                          <div
-                            className={`absolute right-1/2 top-4 w-full h-0.5 -z-0 ${
-                              i <= stepIndex ? 'bg-[#7a1d1d]' : 'bg-gray-200'
-                            }`}
-                          />
-                        )}
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center relative z-10 transition-colors ${
-                            isDone ? 'bg-[#7a1d1d] text-white' : 'bg-gray-200 text-gray-400'
-                          } ${isCurrent ? 'ring-4 ring-[#7a1d1d]/20' : ''}`}
-                        >
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <span className={`text-[10px] mt-1.5 text-center font-medium ${isDone ? 'text-gray-800' : 'text-gray-400'}`}>
-                          {step.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                return (
+                  <div key={step.label} className={`relative flex gap-3 ${i < TIMELINE_STEPS.length - 1 ? 'pb-8' : ''}`}>
+                    {showTime && (
+                      <span className="absolute -left-14 top-0 w-12 text-right text-[11px] font-medium text-gray-400 tabular-nums">
+                        {time}
+                      </span>
+                    )}
 
-            </>
-          )}
+                    {i < TIMELINE_STEPS.length - 1 && (
+                      <div
+                        className={`absolute left-[11px] top-6 bottom-0 w-0.5 ${
+                          isComplete ? 'bg-emerald-500' : 'bg-gray-200'
+                        }`}
+                      />
+                    )}
 
-          {/* ── Order recap ── */}
-          <div className="bg-gray-50 rounded-xl p-4 mb-5 border border-gray-100 space-y-3">
-            <span className="text-sm font-bold text-gray-700">Your Order</span>
-            {lines.map((line) => (
-              <div key={line.id} className="text-sm">
-                <div className="flex justify-between font-medium text-gray-800">
-                  <span>{line.quantity}x {baseItem(line)?.name ?? 'Item'}</span>
-                  <span>GH₵{lineUnitPrice(line) * line.quantity}</span>
-                </div>
-                {otherItems(line).length > 0 && (
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    + {otherItems(line).map((i) => (i.quantity > 1 ? `${i.quantity}x ${i.name}` : i.name)).join(', ')}
-                  </p>
-                )}
-              </div>
-            ))}
-            <div className="flex justify-between pt-3 border-t border-gray-200 font-bold">
-              <span>Total</span>
-              <span className="text-[#7a1d1d]">GH₵{totalPrice}</span>
+                    <div
+                      className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                        isComplete
+                          ? 'bg-emerald-500 text-white'
+                          : isCurrent
+                            ? 'bg-emerald-100 ring-2 ring-emerald-500 text-emerald-700'
+                            : 'bg-gray-200 text-gray-400'
+                      }`}
+                    >
+                      {isComplete ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : null}
+                    </div>
+
+                    <div className="min-w-0 pt-0.5">
+                      <p className={`font-bold text-sm ${isFuture ? 'text-gray-400' : 'text-gray-900'}`}>{step.label}</p>
+                      <p className={`text-xs mt-1 leading-relaxed ${isFuture ? 'text-gray-300' : 'text-gray-500'}`}>
+                        {isCurrent ? step.activeDescription : step.description}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+        )}
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleDone}
-            className="w-full bg-[#7a1d1d] text-white py-4 rounded-2xl font-bold hover:bg-[#6a1717] transition-colors shadow-md"
-          >
-            Done
-          </motion.button>
-        </motion.div>
-
-        <div className="text-center mt-5 text-sm text-gray-500 pb-[env(safe-area-inset-bottom)]">
-          <p className="font-bold text-[#7a1d1d]">Waakye Plug</p>
-          <p>Thanks for ordering! 🙏</p>
+        {/* Order items — green footer block like reference */}
+        <div className="bg-emerald-600 rounded-2xl p-4 text-white shadow-md">
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/80 mb-3">Description</p>
+          <div className="bg-white rounded-xl p-3 text-gray-900 space-y-3">
+            <p className="text-xs font-bold text-emerald-800">{vendorName}</p>
+            {displayItems.map((item, idx) => (
+              <div key={`${item.id}-${idx}`} className="flex items-center gap-3">
+                <MenuItemThumbnail
+                  imageUrl={'imageUrl' in item ? (item as { imageUrl?: string }).imageUrl : undefined}
+                  category={'category' in item ? item.category : 'combo'}
+                  size="sm"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm truncate">
+                    {item.name}
+                    {item.quantity > 1 ? ` × ${item.quantity}` : ''}
+                  </p>
+                  <p className="text-xs text-gray-500">GH₵{(item.price * item.quantity).toFixed(2)}</p>
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+              <span className="font-bold text-emerald-700">GH₵{Number(displayTotal).toFixed(2)}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full">
+                {paymentLabel}
+              </span>
+            </div>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={onDone}
+          className="w-full mt-6 bg-[#7a1d1d] text-white py-4 rounded-2xl font-bold hover:bg-[#6a1717] transition-colors shadow-md"
+        >
+          {status === 'delivered' ? 'Done' : 'View all orders'}
+        </button>
       </div>
     </div>
   );

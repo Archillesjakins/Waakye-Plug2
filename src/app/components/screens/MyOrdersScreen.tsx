@@ -9,6 +9,7 @@ import { supabase } from '@/app/lib/supabase';
 
 interface MyOrdersScreenProps {
   onBack: () => void;
+  onViewOrder?: (orderId: string) => void;
   onOrderAgain?: () => void;
 }
 
@@ -28,7 +29,7 @@ function formatDate(iso: string) {
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
+export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersScreenProps) {
   const { userId } = useUser();
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,10 +104,22 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
               return (
                 <motion.div
                   key={order.id}
+                  role={onViewOrder ? 'button' : undefined}
+                  tabIndex={onViewOrder ? 0 : undefined}
+                  onClick={onViewOrder ? () => onViewOrder(order.id) : undefined}
+                  onKeyDown={
+                    onViewOrder
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') onViewOrder(order.id);
+                        }
+                      : undefined
+                  }
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(i * 0.05, 0.3) }}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4"
+                  className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-left w-full ${
+                    onViewOrder ? 'cursor-pointer hover:border-emerald-200 hover:shadow-md transition-all' : ''
+                  }`}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -141,7 +154,11 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
                   {onOrderAgain && (
                     <div className="flex justify-end pt-2">
                       <button
-                        onClick={onOrderAgain}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOrderAgain();
+                        }}
                         className="flex items-center gap-1.5 bg-[#7a1d1d]/5 text-[#7a1d1d] font-bold text-xs px-3 py-2 rounded-xl active:scale-95 transition-transform hover:bg-[#7a1d1d]/10"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
