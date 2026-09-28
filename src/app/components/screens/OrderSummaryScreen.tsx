@@ -8,7 +8,9 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 import { useCart, CartLine, lineUnitPrice } from '@/app/context/CartContext';
-import { DELIVERY_FEE, SERVICE_FEE } from '@/app/types/orderTypes';
+import { SERVICE_FEE } from '@/app/types/orderTypes';
+import { useVendor } from '@/app/context/VendorContext';
+import { quoteDeliveryFee } from '@/app/lib/deliveryPricing';
 
 interface OrderSummaryScreenProps {
   onBack: () => void;
@@ -45,7 +47,10 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
     deliveryLat, deliveryLng, setDeliveryCoords,
     paymentMethod, setPaymentMethod,
     itemsSubtotal, totalPrice,
+    quotedDeliveryFee, setQuotedDeliveryFee,
+    setQuotedDistanceKm,
   } = useCart();
+  const { selectedVendor } = useVendor();
 
   const [locating, setLocating] = useState(false);
   const [accuracyWarning, setAccuracyWarning] = useState<string | null>(null);
@@ -57,6 +62,24 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
   const userDraggedRef = useRef(false);
   const setDeliveryCoordsRef = useRef(setDeliveryCoords);
   setDeliveryCoordsRef.current = setDeliveryCoords;
+
+  useEffect(() => {
+    const { deliveryFee, distanceKm } = quoteDeliveryFee(
+      selectedVendor?.latitude ?? null,
+      selectedVendor?.longitude ?? null,
+      deliveryLat,
+      deliveryLng
+    );
+    setQuotedDeliveryFee(deliveryFee);
+    setQuotedDistanceKm(distanceKm);
+  }, [
+    selectedVendor?.latitude,
+    selectedVendor?.longitude,
+    deliveryLat,
+    deliveryLng,
+    setQuotedDeliveryFee,
+    setQuotedDistanceKm,
+  ]);
 
   const applyCoords = useCallback((lat: number, lng: number, opts?: { pan?: boolean }) => {
     setDeliveryCoordsRef.current(lat, lng);
@@ -464,8 +487,15 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
                   <span className="text-gray-700">GH₵{itemsSubtotal}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Delivery Fee</span>
-                  <span className="text-gray-700">GH₵{DELIVERY_FEE}</span>
+                  <span className="text-gray-500">
+                    Delivery Fee
+                    {quotedDeliveryFee > 8 && (
+                      <span className="block text-[10px] text-gray-400 font-normal">
+                        Based on distance to vendor
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-gray-700">GH₵{quotedDeliveryFee}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500">Service Fee</span>

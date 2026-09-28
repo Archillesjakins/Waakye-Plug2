@@ -103,6 +103,7 @@ export const EXTRAS: Extra[] = [
   { id: 'drink', name: 'Ice-Kenkey', price: 10, available: true },
 ];
 
+/** Default / near tier — see `deliveryPricing.ts` for distance bands (8 / 10 / 15 GHS). */
 export const DELIVERY_FEE = 8;
 export const SERVICE_FEE = 1;
 

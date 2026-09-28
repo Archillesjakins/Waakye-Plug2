@@ -48,7 +48,7 @@ Note: `npm run build` is `vite build` only — **no `tsc` in the build script** 
 
 | Constant | Value |
 |---|---|
-| `DELIVERY_FEE` | **8 GHS** (`orderTypes.ts`) |
+| Delivery fee | **8 / 10 / 15 GHS** by vendor→dropoff distance (`deliveryPricing.ts`: ≤3.5 / ≤4 / >4 km) |
 | `SERVICE_FEE` | **1 GHS** |
 | Commission (rider) | **10% of delivery fee** (DB trigger) |
 | `MAX_DISTANCE_KM` | **6** (`VendorContext`) |
@@ -63,7 +63,7 @@ Note: `npm run build` is `vite build` only — **no `tsc` in the build script** 
 - **Breakfast (P3):** Landing “breakfast” → toast “coming soon”; `SBlinkspage` dormant / unreachable from primary CTA
 - **Hours:** Platform closes **9 PM**; per-vendor `daily_opens_at` / `daily_closes_at` — see [docs/VENDOR_ORDERING_HOURS.md](docs/VENDOR_ORDERING_HOURS.md). Migration `2026-09-26_vendor_daily_hours.sql` must be applied on Supabase.
 - Build has **no `tsc`** step
-- `createOrder` does **not** send `delivery_fee` — relies on **DB column default**
+- `createOrder` sets **`delivery_fee`** (+ **`distance_km`** when computable) from vendor GPS → dropoff pin
 - Pickup mode is a disabled “coming soon” affordance; delivery-only in practice
 
 ## Schema home

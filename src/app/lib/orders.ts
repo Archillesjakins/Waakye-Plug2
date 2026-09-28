@@ -1,5 +1,7 @@
 import { supabase } from '@/app/lib/supabase';
 import type { CartLine } from '@/app/context/CartContext';
+import { quoteDeliveryFee } from '@/app/lib/deliveryPricing';
+import { getVendorById } from '@/app/lib/vendorMenu';
 
 export function flattenCartItems(lines: CartLine[]) {
   const merged: Record<string, { id: string; name: string; price: number; category: string; quantity: number }> = {};
@@ -41,20 +43,32 @@ export async function createOrder({
 }) {
   const items = flattenCartItems(lines);
 
+  const vendor = await getVendorById(vendorId);
+  const { distanceKm, deliveryFee } = quoteDeliveryFee(
+    vendor?.latitude ?? null,
+    vendor?.longitude ?? null,
+    deliveryLat,
+    deliveryLng
+  );
+
+  const row: Record<string, unknown> = {
+    customer_id: customerId,
+    vendor_id: vendorId,
+    items,
+    total_amount: totalAmount,
+    delivery_fee: deliveryFee,
+    delivery_mode: 'delivery',
+    delivery_address: deliveryAddress,
+    payment_method: paymentMethod,
+    delivery_lat: deliveryLat,
+    delivery_lng: deliveryLng,
+    status: 'available',
+  };
+  if (distanceKm != null) row.distance_km = distanceKm;
+
   const { data, error } = await supabase
     .from('orders')
-    .insert({
-      customer_id: customerId,
-      vendor_id: vendorId,
-      items,
-      total_amount: totalAmount,
-      delivery_mode: 'delivery',
-      delivery_address: deliveryAddress,
-      payment_method: paymentMethod,
-      delivery_lat: deliveryLat,
-      delivery_lng: deliveryLng,
-      status: 'available',
-    })
+    .insert(row)
     .select()
     .single();
 
