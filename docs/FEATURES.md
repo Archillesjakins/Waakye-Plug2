@@ -35,7 +35,7 @@ Every product screen, context, lib, utility, shared component used by the flow, 
 - **Dormant:** not converted to cart model; `App.tsx` `build2` case exists but Landing no longer navigates here for real orders (P3)
 
 ### `OrderSummaryScreen.tsx`
-- Cart review; shows **DELIVERY_FEE (8)** and **SERVICE_FEE (1)**
+- Cart review; shows **delivery (10 / 15 GHS)** and **SERVICE_FEE (1)**
 - Delivery address + payment method `cash` | `momo`
 - Geolocation assists; uses `alert()` for some geo errors (rough edge)
 - Places order via `createOrder`
@@ -118,7 +118,7 @@ Every product screen, context, lib, utility, shared component used by the flow, 
 
 ### `src/app/types/orderTypes.ts`
 - Bowl/breakfast types; `BOWL_SIZES`, `PROTEINS`, `EXTRAS`, etc. (some legacy breakfast structs)
-- **`export const DELIVERY_FEE = 8`**
+- **`deliveryPricing.ts`**: 10 GHS (≤4 km), 15 GHS (>4 km)
 - **`export const SERVICE_FEE = 1`**
 - `calculateOrderTotal` / `calculateBreakfastTotal` / message formatters
 

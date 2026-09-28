@@ -31,6 +31,8 @@ export async function createOrder({
   paymentMethod,
   deliveryLat,
   deliveryLng,
+  quotedDeliveryFee,
+  quotedDistanceKm,
 }: {
   customerId: string;
   vendorId: string;
@@ -40,16 +42,21 @@ export async function createOrder({
   paymentMethod: 'cash' | 'momo';
   deliveryLat: number;
   deliveryLng: number;
+  /** Must match checkout UI (CartContext). */
+  quotedDeliveryFee: number;
+  quotedDistanceKm?: number | null;
 }) {
   const items = flattenCartItems(lines);
 
   const vendor = await getVendorById(vendorId);
-  const { distanceKm, deliveryFee } = quoteDeliveryFee(
+  const quoted = quoteDeliveryFee(
     vendor?.latitude ?? null,
     vendor?.longitude ?? null,
     deliveryLat,
     deliveryLng
   );
+  const deliveryFee = quotedDeliveryFee;
+  const distanceKm = quotedDistanceKm ?? quoted.distanceKm;
 
   const row: Record<string, unknown> = {
     customer_id: customerId,

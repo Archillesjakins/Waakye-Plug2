@@ -47,10 +47,16 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
     deliveryLat, deliveryLng, setDeliveryCoords,
     paymentMethod, setPaymentMethod,
     itemsSubtotal, totalPrice,
-    quotedDeliveryFee, setQuotedDeliveryFee,
+    quotedDeliveryFee,
+    setQuotedDeliveryFee,
+    quotedDistanceKm,
     setQuotedDistanceKm,
   } = useCart();
-  const { selectedVendor } = useVendor();
+  const { selectedVendor, refreshSelectedVendor } = useVendor();
+
+  useEffect(() => {
+    void refreshSelectedVendor();
+  }, [refreshSelectedVendor]);
 
   const [locating, setLocating] = useState(false);
   const [accuracyWarning, setAccuracyWarning] = useState<string | null>(null);
@@ -488,10 +494,14 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500">
-                    Delivery Fee
-                    {quotedDeliveryFee > 8 && (
+                    Delivery fee
+                    {quotedDistanceKm != null ? (
                       <span className="block text-[10px] text-gray-400 font-normal">
-                        Based on distance to vendor
+                        {quotedDistanceKm.toFixed(1)} km from shop (GH₵10 up to 4 km · GH₵15 beyond)
+                      </span>
+                    ) : (
+                      <span className="block text-[10px] text-amber-700/90 font-normal">
+                        Using GH₵10 — vendor shop GPS missing in admin
                       </span>
                     )}
                   </span>

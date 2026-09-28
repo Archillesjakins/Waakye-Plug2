@@ -54,7 +54,7 @@ No React Router for the product flow — `App.tsx` switches `currentScreen`.
 - Flattens cart lines to item rows
 - Inserts: customer_id, vendor_id, items, total_amount, `delivery_mode: 'delivery'`, delivery_address, payment_method, **`status: 'available'`**
 - **Does not set `delivery_fee` in the insert** — depends on DB default (documented gap)
-- Cart totals on the client still add `DELIVERY_FEE` (8) + `SERVICE_FEE` (1)
+- Cart totals add quoted delivery (10 / 15 GHS) + `SERVICE_FEE` (1)
 
 ## Status tracker
 
@@ -78,7 +78,7 @@ Edge functions themselves live in the **rider** repo; PIN rate-limit **tables/RP
 
 | Symbol | Where | Value |
 |---|---|---|
-| `DELIVERY_FEE` | `orderTypes.ts` | 8 |
+| Delivery bands | `deliveryPricing.ts` | 10 (≤4 km), 15 (>4 km) |
 | `SERVICE_FEE` | `orderTypes.ts` | 1 |
 | `MAX_DISTANCE_KM` | `VendorContext.tsx` | 6 |
 

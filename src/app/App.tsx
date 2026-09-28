@@ -41,8 +41,19 @@ export default function App() {
 
 function AppContent() {
   const { hasUser, userId, ready } = useUser();
-  const { addToCart, clearCart, lines, deliveryMode, customerLocation, deliveryLat, deliveryLng, paymentMethod, totalPrice } =
-    useCart();
+  const {
+    addToCart,
+    clearCart,
+    lines,
+    deliveryMode,
+    customerLocation,
+    deliveryLat,
+    deliveryLng,
+    paymentMethod,
+    totalPrice,
+    quotedDeliveryFee,
+    quotedDistanceKm,
+  } = useCart();
   const { selectedVendor, clearVendor } = useVendor();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
@@ -152,6 +163,8 @@ function AppContent() {
         paymentMethod,
         deliveryLat,
         deliveryLng,
+        quotedDeliveryFee,
+        quotedDistanceKm,
       });
       setLastOrderId(created.id);
     } catch (e) {

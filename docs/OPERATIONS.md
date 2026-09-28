@@ -7,7 +7,7 @@
 3. Allow location → pick vendor within **6 km**
 4. Add items / build waakye → cart → delivery address
 5. Pay **cash or momo at delivery** (no in-app Paystack for customers yet)
-6. Fees: items + **delivery 8 / 10 / 15 GHS** (by distance) + **1 GHS service**
+6. Fees: items + **delivery 10 / 15 GHS** (≤4 km / >4 km) + **1 GHS service**
 7. Track: Order Sent → Rider Assigned → Picked Up → Delivered
 
 ## Ordering hours (current code vs copy)
@@ -33,7 +33,7 @@ Landing breakfast path shows coming soon; do not promise breakfast in ops until 
 
 | Item | Value |
 |---|---|
-| Delivery | 8 GHS |
+| Delivery | 10 GHS (≤4 km) · 15 GHS (>4 km) |
 | Service | 1 GHS |
 | Rider commission | 10% of delivery fee (not shown to customer) |
 | Statuses | available → rider_assigned → picked_up → delivered \| cancelled |

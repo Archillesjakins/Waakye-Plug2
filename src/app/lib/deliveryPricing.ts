@@ -1,16 +1,23 @@
 import { distanceKm } from '@/app/lib/vendorMenu';
 
-/** Short trips (≤ 3.5 km vendor → dropoff). */
-export const DELIVERY_FEE_NEAR_GHS = 8;
-/** 3.5 km < distance ≤ 4 km. */
-export const DELIVERY_FEE_MID_GHS = 10;
-/** Distance > 4 km. */
+/** Vendor → dropoff ≤ 4 km (and default when distance unknown). */
+export const DELIVERY_FEE_STANDARD_GHS = 10;
+/** Vendor → dropoff > 4 km. */
 export const DELIVERY_FEE_FAR_GHS = 15;
 
+/** @deprecated Use DELIVERY_FEE_STANDARD_GHS */
+export const DELIVERY_FEE_NEAR_GHS = DELIVERY_FEE_STANDARD_GHS;
+
+/** PostgREST may return numeric columns as strings — normalize before distance math. */
+export function parseCoord(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function deliveryFeeForDistanceKm(km: number | null | undefined): number {
-  if (km == null || !Number.isFinite(km) || km < 0) return DELIVERY_FEE_NEAR_GHS;
-  if (km <= 3.5) return DELIVERY_FEE_NEAR_GHS;
-  if (km <= 4) return DELIVERY_FEE_MID_GHS;
+  if (km == null || !Number.isFinite(km) || km < 0) return DELIVERY_FEE_STANDARD_GHS;
+  if (km <= 4) return DELIVERY_FEE_STANDARD_GHS;
   return DELIVERY_FEE_FAR_GHS;
 }
 
@@ -21,19 +28,14 @@ export function dropoffDistanceKm(
   deliveryLat: number | null | undefined,
   deliveryLng: number | null | undefined
 ): number | null {
-  if (
-    vendorLat == null ||
-    vendorLng == null ||
-    deliveryLat == null ||
-    deliveryLng == null ||
-    !Number.isFinite(vendorLat) ||
-    !Number.isFinite(vendorLng) ||
-    !Number.isFinite(deliveryLat) ||
-    !Number.isFinite(deliveryLng)
-  ) {
+  const vLat = parseCoord(vendorLat);
+  const vLng = parseCoord(vendorLng);
+  const dLat = parseCoord(deliveryLat);
+  const dLng = parseCoord(deliveryLng);
+  if (vLat == null || vLng == null || dLat == null || dLng == null) {
     return null;
   }
-  return Math.round(distanceKm(vendorLat, vendorLng, deliveryLat, deliveryLng) * 100) / 100;
+  return Math.round(distanceKm(vLat, vLng, dLat, dLng) * 100) / 100;
 }
 
 export function quoteDeliveryFee(

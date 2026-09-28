@@ -48,7 +48,7 @@ Note: `npm run build` is `vite build` only — **no `tsc` in the build script** 
 
 | Constant | Value |
 |---|---|
-| Delivery fee | **8 / 10 / 15 GHS** by vendor→dropoff distance (`deliveryPricing.ts`: ≤3.5 / ≤4 / >4 km) |
+| Delivery fee | **10 / 15 GHS** by vendor→dropoff distance (`deliveryPricing.ts`: ≤4 km / >4 km) |
 | `SERVICE_FEE` | **1 GHS** |
 | Commission (rider) | **10% of delivery fee** (DB trigger) |
 | `MAX_DISTANCE_KM` | **6** (`VendorContext`) |

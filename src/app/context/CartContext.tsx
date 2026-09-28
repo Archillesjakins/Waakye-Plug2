@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { SERVICE_FEE } from '@/app/types/orderTypes';
-import { DELIVERY_FEE_NEAR_GHS } from '@/app/lib/deliveryPricing';
+import { DELIVERY_FEE_STANDARD_GHS } from '@/app/lib/deliveryPricing';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 
 // Flat shape matching exactly what orders.items needs in Supabase —
@@ -76,7 +76,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
   const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [quotedDeliveryFee, setQuotedDeliveryFee] = useState(DELIVERY_FEE_NEAR_GHS);
+  const [quotedDeliveryFee, setQuotedDeliveryFee] = useState(DELIVERY_FEE_STANDARD_GHS);
   const [quotedDistanceKm, setQuotedDistanceKm] = useState<number | null>(null);
 
   const addToCart = (vendorId: string, items: OrderLineItem[]) => {
@@ -112,7 +112,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setDeliveryLat(null);
     setDeliveryLng(null);
     setPaymentMethod('cash');
-    setQuotedDeliveryFee(DELIVERY_FEE_NEAR_GHS);
+    setQuotedDeliveryFee(DELIVERY_FEE_STANDARD_GHS);
     setQuotedDistanceKm(null);
   };
 
