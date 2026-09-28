@@ -39,6 +39,15 @@ Landing breakfast path shows coming soon; do not promise breakfast in ops until 
 | Statuses | available → rider_assigned → picked_up → delivered \| cancelled |
 | `delivery_fee` column | Expect DB default when client omits it on insert |
 
+## Supabase migrations (apply on `verncapitxzsgcughvil` before / with deploy)
+
+Run in **SQL Editor** (in order, skip any already applied):
+
+1. `schema/migrations/2026-09-26_vendor_daily_hours.sql` — vendor open/close times
+2. `schema/migrations/20260928_orders_distance_km.sql` — `orders.distance_km` at checkout
+
+If checkout fails with **PGRST204 / `distance_km`**, the second migration is missing.
+
 ## Incident notes
 
 - Profile save 403 after RLS: ensure client uses INSERT/UPDATE split (not upsert) and migrations applied

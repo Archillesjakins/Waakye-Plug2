@@ -66,11 +66,17 @@ export async function createOrder({
   };
   if (distanceKm != null) row.distance_km = distanceKm;
 
-  const { data, error } = await supabase
-    .from('orders')
-    .insert(row)
-    .select()
-    .single();
+  let { data, error } = await supabase.from('orders').insert(row).select().single();
+
+  // Live DB may lag behind app deploy — apply schema/migrations/20260928_orders_distance_km.sql
+  if (
+    error?.code === 'PGRST204' &&
+    typeof error.message === 'string' &&
+    error.message.includes('distance_km')
+  ) {
+    const { distance_km: _drop, ...withoutDistance } = row;
+    ({ data, error } = await supabase.from('orders').insert(withoutDistance).select().single());
+  }
 
   if (error) throw error;
   return data;
