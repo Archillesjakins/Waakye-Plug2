@@ -46,6 +46,7 @@ Disallowed examples: release from `picked_up` or `available`; rider self-cancel;
 
 **`orders`**
 
+- `delivery_code` (text, 4 digits — see [DELIVERY_CONFIRMATION_CODE.md](DELIVERY_CONFIRMATION_CODE.md))
 - `delivery_code_hash` (text, nullable)
 - `cancel_reason` (text)
 - `cancelled_at` (timestamptz)
@@ -59,8 +60,7 @@ Disallowed examples: release from `picked_up` or `available`; rider self-cancel;
 
 ## Out of scope (later stories)
 
-- Edge functions / UI that enforce the transition matrix at runtime
-- Generating and verifying delivery codes end-to-end
+- Edge functions / UI that enforce the full transition matrix at runtime (beyond delivery verify)
 - Applying / clearing `pending_delivery_fee_owed` at checkout
 - Any `riders_one_active_order` constraint (not present in this repo’s migrations as of Story 1)
 

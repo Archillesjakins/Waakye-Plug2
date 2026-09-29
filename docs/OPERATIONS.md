@@ -9,6 +9,7 @@
 5. Pay **cash or momo at delivery** (no in-app Paystack for customers yet)
 6. Fees: items + **delivery 10 / 15 GHS** (≤4 km / >4 km) + **1 GHS service**
 7. Track: Order Sent → Rider Assigned → Picked Up → Delivered
+8. **Delivery code:** customer shows **4-digit code** at dropoff; rider confirms in rider app — see [DELIVERY_CONFIRMATION_CODE.md](DELIVERY_CONFIRMATION_CODE.md) (both apps documented)
 
 ## Ordering hours (current code vs copy)
 

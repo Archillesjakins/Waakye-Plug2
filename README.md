@@ -42,6 +42,7 @@ Note: `npm run build` is `vite build` only — **no `tsc` in the build script** 
 | [docs/SETUP.md](docs/SETUP.md) | Env, scripts, migrations apply notes |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Hours gating, fees, WhatsApp group, gaps |
 | [docs/VENDOR_ORDERING_HOURS.md](docs/VENDOR_ORDERING_HOURS.md) | **Platform 9 PM cutoff + per-vendor daily hours** (team rollout) |
+| [docs/DELIVERY_CONFIRMATION_CODE.md](docs/DELIVERY_CONFIRMATION_CODE.md) | **4-digit handoff code** — customer + rider repos, migration, verify-delivery |
 | [AUDIT.md](AUDIT.md) | Security/bug audit + fix log (keep) |
 
 ## Platform constants
@@ -53,6 +54,7 @@ Note: `npm run build` is `vite build` only — **no `tsc` in the build script** 
 | Commission (rider) | **10% of delivery fee** (DB trigger) |
 | `MAX_DISTANCE_KM` | **6** (`VendorContext`) |
 | Status enum | `available` → `rider_assigned` → `picked_up` → `delivered` \| `cancelled` |
+| Delivery handoff | **4-digit `delivery_code`** — customer shows, rider verifies ([doc](docs/DELIVERY_CONFIRMATION_CODE.md)) |
 | Synthetic customer email | `{userId}@customers.waakyeplug.app` |
 | ClosedScreen WhatsApp group | https://chat.whatsapp.com/HM1OVHvnfZr0l1WPhJPRDg |
 | Accra noon lock | Rider settlement (sibling app) |

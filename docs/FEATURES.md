@@ -44,10 +44,12 @@ Every product screen, context, lib, utility, shared component used by the flow, 
 - Live status tracker for canonical steps: available → rider_assigned → picked_up → delivered
 - Realtime subscription on the order row
 - Cancelled handled via header copy map
+- **4-digit delivery code** (`DeliveryCodeCard`) while order is active — pairs with rider app; see [DELIVERY_CONFIRMATION_CODE.md](DELIVERY_CONFIRMATION_CODE.md)
 
 ### `MyOrdersScreen.tsx`
 - `fetchMyOrders(customerId)` from Supabase (single history source after P2 fix)
 - Realtime-friendly status display; rider name/phone when joined
+- Shows **delivery code** on in-progress orders
 
 ### `ClosedScreen.tsx`
 - Shown when ordering status is closed (or forced)
