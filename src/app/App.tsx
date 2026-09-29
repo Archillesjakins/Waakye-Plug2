@@ -20,7 +20,7 @@ import { useUser } from '@/app/context/UserContext';
 import { CartProvider, useCart } from '@/app/context/CartContext';
 import { VendorProvider, useVendor } from '@/app/context/VendorContext';
 import { FloatingCartButton } from '@/app/components/FloatingCartButton';
-import { recallDeliveryCode, rememberDeliveryCode } from '@/app/lib/deliveryCode';
+import { formatDeliveryCode, recallDeliveryCode, rememberDeliveryCode } from '@/app/lib/deliveryCode';
 import { createOrder } from '@/app/lib/orders';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 import { Toaster, toast } from 'sonner';
@@ -168,10 +168,16 @@ function AppContent() {
         quotedDeliveryFee,
         quotedDistanceKm,
       });
-      const code = (created as { delivery_code?: string | null }).delivery_code ?? null;
-      setLastOrderId(created.id);
+      const orderId = created?.id as string | undefined;
+      if (!orderId) {
+        toast.error('Order was created but id was missing — check My Orders.');
+        setCurrentScreen('myOrders');
+        return;
+      }
+      const code = formatDeliveryCode((created as { delivery_code?: string | null }).delivery_code) ?? null;
+      setLastOrderId(orderId);
       setLastOrderDeliveryCode(code);
-      if (code) rememberDeliveryCode(created.id, code);
+      if (code) rememberDeliveryCode(orderId, code);
     } catch (e) {
       console.error('Could not create order', e);
       toast.error('Could not place your order — please try again.');

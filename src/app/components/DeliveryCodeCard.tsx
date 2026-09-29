@@ -2,6 +2,8 @@
 
 import { formatDeliveryCode } from '@/app/lib/deliveryCode';
 
+const BRAND = '#7a1d1d';
+
 type DeliveryCodeCardProps = {
   code: string | null | undefined;
   compact?: boolean;
@@ -18,7 +20,8 @@ function DigitRow({ digits, size }: { digits: string; size: 'lg' | 'sm' }) {
       {digits.split('').map((digit, i) => (
         <span
           key={`${digit}-${i}`}
-          className={`${box} inline-flex items-center justify-center font-mono font-bold tabular-nums bg-white border-2 border-emerald-200 text-emerald-950 shadow-sm`}
+          className={`${box} inline-flex items-center justify-center font-mono font-bold tabular-nums bg-white border-2 shadow-sm`}
+          style={{ borderColor: `${BRAND}33`, color: BRAND }}
         >
           {digit}
         </span>
@@ -36,13 +39,17 @@ export function DeliveryCodeCard({ code, compact = false }: DeliveryCodeCardProp
   }
 
   return (
-    <div className="rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50/80 p-5 text-center">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-800/80 mb-3">
+    <div
+      className="rounded-2xl border-2 border-dashed p-5 text-center bg-[#faf6ee]"
+      style={{ borderColor: `${BRAND}55` }}
+    >
+      <p className="text-[10px] font-bold uppercase tracking-wide mb-3" style={{ color: BRAND }}>
         Delivery confirmation code
       </p>
       <DigitRow digits={formatted} size="lg" />
-      <p className="text-xs text-emerald-800/70 mt-4 leading-relaxed">
-        Show these four numbers to your rider at dropoff.
+      <p className="text-xs text-gray-600 mt-4 leading-relaxed">
+        Tell your rider these <span className="font-bold">four numbers</span> at dropoff so they know it&apos;s your
+        order.
       </p>
     </div>
   );

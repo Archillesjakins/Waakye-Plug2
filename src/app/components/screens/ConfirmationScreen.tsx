@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, Check, XCircle } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
 import { supabase } from '@/app/lib/supabase';
 import { fetchOrderById, type CustomerOrder } from '@/app/lib/customerOrders';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
+import { formatDeliveryCode, recallDeliveryCode, rememberDeliveryCode } from '@/app/lib/deliveryCode';
 
+const BRAND = '#7a1d1d';
 interface ConfirmationScreenProps {
   orderId: string | null;
   /** From checkout — shown immediately even before order fetch completes. */
@@ -21,7 +23,6 @@ type OrderStatus = 'available' | 'rider_assigned' | 'picked_up' | 'delivered' | 
 const TIMELINE_STEPS: {
   label: string;
   description: string;
-  /** Shown when this step is the current one (in progress). */
   activeDescription: string;
 }[] = [
   {
@@ -96,6 +97,7 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
         if (!alive || !row) return;
         setOrder(row);
         setStatus(row.status as OrderStatus);
+        if (row.delivery_code) rememberDeliveryCode(orderId, row.delivery_code);
       } catch (err) {
         console.error('Could not load order', err);
       }
@@ -120,8 +122,18 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
     };
   }, [orderId]);
 
+  const deliveryCode = useMemo(() => {
+    if (!orderId) return null;
+    return (
+      formatDeliveryCode(order?.delivery_code) ??
+      formatDeliveryCode(initialDeliveryCode) ??
+      recallDeliveryCode(orderId)
+    );
+  }, [orderId, order?.delivery_code, initialDeliveryCode]);
+
   const cancelled = status === 'cancelled';
   const activeStep = cancelled ? 0 : statusToStepIndex(status);
+  const showDeliveryHandoff = !!orderId && !cancelled && status !== 'delivered';
 
   const displayItems =
     order?.items && order.items.length > 0
@@ -138,13 +150,12 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
   const paymentLabel =
     order?.payment_method === 'momo' ? 'MoMo' : order?.payment_method === 'cash' ? 'Cash' : 'Paid';
 
-  const deliveryCode = order?.delivery_code ?? initialDeliveryCode ?? null;
-  const showDeliveryCode = !cancelled && status !== 'delivered' && !!deliveryCode;
-
   return (
     <div className="min-h-[100dvh] bg-[#fefaf4] flex flex-col [webkit-tap-highlight-color:transparent]">
-      {/* Header — full-width bar like reference “Order details” */}
-      <div className="bg-emerald-600 text-white px-4 pt-[max(env(safe-area-inset-top),12px)] pb-4 shadow-md">
+      <div
+        className="text-white px-4 pt-[max(env(safe-area-inset-top),12px)] pb-4 shadow-md"
+        style={{ backgroundColor: BRAND }}
+      >
         <div className="max-w-md mx-auto flex items-center gap-3">
           <button
             type="button"
@@ -156,30 +167,37 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
           </button>
           <div className="flex-1 text-center pr-8">
             <h1 className="font-bold text-lg">Order details</h1>
-            {showDeliveryCode && (
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/80 mt-0.5">
-                Tell your rider this code at dropoff
+            {showDeliveryHandoff && deliveryCode && (
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/85 mt-0.5">
+                Your rider needs this code at dropoff
               </p>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 max-w-md mx-auto w-full px-4 py-6 pb-8">
-        {showDeliveryCode && (
-          <div className="mb-6 -mt-2">
-            <DeliveryCodeCard code={deliveryCode} />
-          </div>
+      <div className="flex-1 max-w-md mx-auto w-full px-4 py-5 pb-8 space-y-5">
+        {showDeliveryHandoff && (
+          <section aria-label="Delivery confirmation code">
+            {deliveryCode ? (
+              <DeliveryCodeCard code={deliveryCode} />
+            ) : (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900">
+                Loading your delivery code… If this stays blank, open <span className="font-bold">My Orders</span> or
+                place the order again after updating the app.
+              </div>
+            )}
+          </section>
         )}
 
         {cancelled ? (
-          <div className="bg-white rounded-2xl border border-red-100 p-6 text-center mb-6">
+          <div className="bg-white rounded-2xl border border-red-100 p-6 text-center">
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
             <h2 className="font-bold text-lg text-gray-900">Order cancelled</h2>
             <p className="text-sm text-gray-500 mt-2">The vendor cancelled this order. Contact them if you need help.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             {orderId && (
               <p className="text-xs text-gray-400 mb-4">
                 Order #{shortOrderRef(orderId)}
@@ -187,7 +205,6 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
               </p>
             )}
 
-            {/* Vertical timeline (reference-style) */}
             <div className="relative pl-14">
               {TIMELINE_STEPS.map((step, i) => {
                 const isComplete = i < activeStep || status === 'delivered';
@@ -206,20 +223,22 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
 
                     {i < TIMELINE_STEPS.length - 1 && (
                       <div
-                        className={`absolute left-[11px] top-6 bottom-0 w-0.5 ${
-                          isComplete ? 'bg-emerald-500' : 'bg-gray-200'
-                        }`}
+                        className="absolute left-[11px] top-6 bottom-0 w-0.5"
+                        style={{ backgroundColor: isComplete ? BRAND : '#e5e7eb' }}
                       />
                     )}
 
                     <div
                       className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                        isComplete
-                          ? 'bg-emerald-500 text-white'
-                          : isCurrent
-                            ? 'bg-emerald-100 ring-2 ring-emerald-500 text-emerald-700'
-                            : 'bg-gray-200 text-gray-400'
+                        isFuture ? 'bg-gray-200 text-gray-400' : isCurrent ? 'bg-[#faf6ee] text-white' : 'text-white'
                       }`}
+                      style={
+                        isComplete
+                          ? { backgroundColor: BRAND }
+                          : isCurrent
+                            ? { boxShadow: `0 0 0 2px ${BRAND}` }
+                            : undefined
+                      }
                     >
                       {isComplete ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : null}
                     </div>
@@ -237,11 +256,12 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
           </div>
         )}
 
-        {/* Order items — green footer block like reference */}
-        <div className="bg-emerald-600 rounded-2xl p-4 text-white shadow-md">
-          <p className="text-xs font-semibold uppercase tracking-wide text-white/80 mb-3">Description</p>
+        <div className="rounded-2xl p-4 text-white shadow-md" style={{ backgroundColor: BRAND }}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-white/80 mb-3">Your order</p>
           <div className="bg-white rounded-xl p-3 text-gray-900 space-y-3">
-            <p className="text-xs font-bold text-emerald-800">{vendorName}</p>
+            <p className="text-xs font-bold" style={{ color: BRAND }}>
+              {vendorName}
+            </p>
             {displayItems.map((item, idx) => (
               <div key={`${item.id}-${idx}`} className="flex items-center gap-3">
                 <MenuItemThumbnail
@@ -259,8 +279,13 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
               </div>
             ))}
             <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-              <span className="font-bold text-emerald-700">GH₵{Number(displayTotal).toFixed(2)}</span>
-              <span className="text-[10px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full">
+              <span className="font-bold" style={{ color: BRAND }}>
+                GH₵{Number(displayTotal).toFixed(2)}
+              </span>
+              <span
+                className="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-[#faf6ee]"
+                style={{ color: BRAND }}
+              >
                 {paymentLabel}
               </span>
             </div>
@@ -270,7 +295,7 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
         <button
           type="button"
           onClick={onDone}
-          className="w-full mt-6 bg-[#7a1d1d] text-white py-4 rounded-2xl font-bold hover:bg-[#6a1717] transition-colors shadow-md"
+          className="w-full bg-[#7a1d1d] hover:bg-[#6a1717] text-white py-4 rounded-2xl font-bold transition-colors shadow-md"
         >
           {status === 'delivered' ? 'Done' : 'View all orders'}
         </button>

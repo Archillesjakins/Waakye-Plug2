@@ -6,7 +6,7 @@ import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapP
 import { fetchMyOrders, type CustomerOrder } from '@/app/lib/customerOrders';
 import { useUser } from '@/app/context/UserContext';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
-import { isActiveDeliveryCodeStatus } from '@/app/lib/deliveryCode';
+import { formatDeliveryCode, isActiveDeliveryCodeStatus, recallDeliveryCode } from '@/app/lib/deliveryCode';
 import { supabase } from '@/app/lib/supabase';
 
 interface MyOrdersScreenProps {
@@ -102,6 +102,8 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersSc
               const config = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending;
               const StatusIcon = config.icon;
               const riderName = order.riders?.profiles?.full_name;
+              const handoffCode =
+                formatDeliveryCode(order.delivery_code) ?? recallDeliveryCode(order.id);
 
               return (
                 <motion.div
@@ -120,7 +122,7 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersSc
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(i * 0.05, 0.3) }}
                   className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-left w-full ${
-                    onViewOrder ? 'cursor-pointer hover:border-emerald-200 hover:shadow-md transition-all' : ''
+                    onViewOrder ? 'cursor-pointer hover:border-[#7a1d1d]/25 hover:shadow-md transition-all' : ''
                   }`}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -139,10 +141,10 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersSc
                     <span className="line-clamp-2">{order.delivery_address}</span>
                   </div>
 
-                  {isActiveDeliveryCodeStatus(order.status) && order.delivery_code && (
-                    <div className="flex items-center justify-between bg-emerald-50/80 rounded-xl px-3 py-2 mb-3 text-xs">
-                      <span className="font-medium text-emerald-900">Delivery code</span>
-                      <DeliveryCodeCard code={order.delivery_code} compact />
+                  {isActiveDeliveryCodeStatus(order.status) && handoffCode && (
+                    <div className="flex items-center justify-between bg-[#faf6ee] rounded-xl px-3 py-2 mb-3 text-xs border border-[#7a1d1d]/10">
+                      <span className="font-medium text-[#7a1d1d]">Delivery code for rider</span>
+                      <DeliveryCodeCard code={handoffCode} compact />
                     </div>
                   )}
 
