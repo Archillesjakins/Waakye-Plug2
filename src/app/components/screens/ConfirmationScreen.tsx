@@ -10,6 +10,8 @@ import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 
 interface ConfirmationScreenProps {
   orderId: string | null;
+  /** From checkout — shown immediately even before order fetch completes. */
+  initialDeliveryCode?: string | null;
   onDone: () => void;
   onBack?: () => void;
 }
@@ -78,7 +80,7 @@ function shortOrderRef(id: string): string {
   return id.replace(/-/g, '').slice(-4).toUpperCase();
 }
 
-export function ConfirmationScreen({ orderId, onDone, onBack }: ConfirmationScreenProps) {
+export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBack }: ConfirmationScreenProps) {
   const { lines, totalPrice } = useCart();
   const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [status, setStatus] = useState<OrderStatus>('available');
@@ -89,10 +91,14 @@ export function ConfirmationScreen({ orderId, onDone, onBack }: ConfirmationScre
     let alive = true;
 
     async function load() {
-      const row = await fetchOrderById(orderId);
-      if (!alive || !row) return;
-      setOrder(row);
-      setStatus(row.status as OrderStatus);
+      try {
+        const row = await fetchOrderById(orderId);
+        if (!alive || !row) return;
+        setOrder(row);
+        setStatus(row.status as OrderStatus);
+      } catch (err) {
+        console.error('Could not load order', err);
+      }
     }
 
     load();
@@ -132,6 +138,9 @@ export function ConfirmationScreen({ orderId, onDone, onBack }: ConfirmationScre
   const paymentLabel =
     order?.payment_method === 'momo' ? 'MoMo' : order?.payment_method === 'cash' ? 'Cash' : 'Paid';
 
+  const deliveryCode = order?.delivery_code ?? initialDeliveryCode ?? null;
+  const showDeliveryCode = !cancelled && status !== 'delivered' && !!deliveryCode;
+
   return (
     <div className="min-h-[100dvh] bg-[#fefaf4] flex flex-col [webkit-tap-highlight-color:transparent]">
       {/* Header — full-width bar like reference “Order details” */}
@@ -145,14 +154,21 @@ export function ConfirmationScreen({ orderId, onDone, onBack }: ConfirmationScre
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
-          <h1 className="flex-1 text-center font-bold text-lg pr-8">Order details</h1>
+          <div className="flex-1 text-center pr-8">
+            <h1 className="font-bold text-lg">Order details</h1>
+            {showDeliveryCode && (
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/80 mt-0.5">
+                Tell your rider this code at dropoff
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="flex-1 max-w-md mx-auto w-full px-4 py-6 pb-8">
-        {!cancelled && status !== 'delivered' && order?.delivery_code && (
-          <div className="mb-6">
-            <DeliveryCodeCard code={order.delivery_code} />
+        {showDeliveryCode && (
+          <div className="mb-6 -mt-2">
+            <DeliveryCodeCard code={deliveryCode} />
           </div>
         )}
 

@@ -59,6 +59,8 @@ export async function createOrder({
   const deliveryFee = quotedDeliveryFee;
   const distanceKm = quotedDistanceKm ?? quoted.distanceKm;
 
+  const clientDeliveryCode = generateDeliveryCode();
+
   const row: Record<string, unknown> = {
     customer_id: customerId,
     vendor_id: vendorId,
@@ -71,7 +73,7 @@ export async function createOrder({
     delivery_lat: deliveryLat,
     delivery_lng: deliveryLng,
     status: 'available',
-    delivery_code: generateDeliveryCode(),
+    delivery_code: clientDeliveryCode,
   };
   if (distanceKm != null) row.distance_km = distanceKm;
 
@@ -97,5 +99,10 @@ export async function createOrder({
   }
 
   if (error) throw error;
-  return data;
+
+  const persisted = (data as { delivery_code?: string | null } | null)?.delivery_code;
+  return {
+    ...data,
+    delivery_code: persisted ?? clientDeliveryCode,
+  };
 }

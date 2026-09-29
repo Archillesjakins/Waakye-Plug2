@@ -20,6 +20,7 @@ import { useUser } from '@/app/context/UserContext';
 import { CartProvider, useCart } from '@/app/context/CartContext';
 import { VendorProvider, useVendor } from '@/app/context/VendorContext';
 import { FloatingCartButton } from '@/app/components/FloatingCartButton';
+import { recallDeliveryCode, rememberDeliveryCode } from '@/app/lib/deliveryCode';
 import { createOrder } from '@/app/lib/orders';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 import { Toaster, toast } from 'sonner';
@@ -60,6 +61,7 @@ function AppContent() {
   const [platformStatus, setPlatformStatus] = useState(getPlatformOrderingStatus());
   const [orderType, setOrderType] = useState<OrderType>('waakye');
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+  const [lastOrderDeliveryCode, setLastOrderDeliveryCode] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [breakfastOrder, setBreakfastOrder] = useState<Breakfast>({
     drink: 'tea',
@@ -166,7 +168,10 @@ function AppContent() {
         quotedDeliveryFee,
         quotedDistanceKm,
       });
+      const code = (created as { delivery_code?: string | null }).delivery_code ?? null;
       setLastOrderId(created.id);
+      setLastOrderDeliveryCode(code);
+      if (code) rememberDeliveryCode(created.id, code);
     } catch (e) {
       console.error('Could not create order', e);
       toast.error('Could not place your order — please try again.');
@@ -235,6 +240,7 @@ function AppContent() {
             onBack={() => setCurrentScreen('home')}
             onViewOrder={(id) => {
               setLastOrderId(id);
+              setLastOrderDeliveryCode(recallDeliveryCode(id));
               setCurrentScreen('confirm');
             }}
             onOrderAgain={() => {
@@ -289,6 +295,7 @@ function AppContent() {
         return (
           <ConfirmationScreen
             orderId={lastOrderId}
+            initialDeliveryCode={lastOrderDeliveryCode}
             onDone={handleOrderDone}
             onBack={() => setCurrentScreen('home')}
           />
