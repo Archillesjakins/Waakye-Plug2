@@ -45,8 +45,10 @@ Run in **SQL Editor** (in order, skip any already applied):
 
 1. `schema/migrations/2026-09-26_vendor_daily_hours.sql` — vendor open/close times
 2. `schema/migrations/20260928_orders_distance_km.sql` — `orders.distance_km` at checkout
+3. `schema/migrations/20260929_orders_delivery_code.sql` — 4-digit customer/rider handoff code
 
 If checkout fails with **PGRST204 / `distance_km`**, the second migration is missing.
+If **delivery_code** is missing on orders, run migration 3.
 
 ## Incident notes
 

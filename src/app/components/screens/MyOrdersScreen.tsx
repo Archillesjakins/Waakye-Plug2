@@ -5,6 +5,8 @@ import { motion } from 'motion/react';
 import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapPin, RotateCcw } from 'lucide-react';
 import { fetchMyOrders, type CustomerOrder } from '@/app/lib/customerOrders';
 import { useUser } from '@/app/context/UserContext';
+import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
+import { isActiveDeliveryCodeStatus } from '@/app/lib/deliveryCode';
 import { supabase } from '@/app/lib/supabase';
 
 interface MyOrdersScreenProps {
@@ -136,6 +138,13 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersSc
                     <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     <span className="line-clamp-2">{order.delivery_address}</span>
                   </div>
+
+                  {isActiveDeliveryCodeStatus(order.status) && order.delivery_code && (
+                    <div className="flex items-center justify-between bg-emerald-50/80 rounded-xl px-3 py-2 mb-3 text-xs">
+                      <span className="font-medium text-emerald-900">Delivery code</span>
+                      <DeliveryCodeCard code={order.delivery_code} compact />
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between pt-3 border-t border-gray-50">
                     {riderName ? (

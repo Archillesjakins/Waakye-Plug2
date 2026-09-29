@@ -1,5 +1,6 @@
 import { supabase } from '@/app/lib/supabase';
 import type { CartLine } from '@/app/context/CartContext';
+import { generateDeliveryCode } from '@/app/lib/deliveryCode';
 import { quoteDeliveryFee } from '@/app/lib/deliveryPricing';
 import { getVendorById } from '@/app/lib/vendorMenu';
 
@@ -70,6 +71,7 @@ export async function createOrder({
     delivery_lat: deliveryLat,
     delivery_lng: deliveryLng,
     status: 'available',
+    delivery_code: generateDeliveryCode(),
   };
   if (distanceKm != null) row.distance_km = distanceKm;
 
@@ -83,6 +85,15 @@ export async function createOrder({
   ) {
     const { distance_km: _drop, ...withoutDistance } = row;
     ({ data, error } = await supabase.from('orders').insert(withoutDistance).select().single());
+  }
+
+  if (
+    error?.code === 'PGRST204' &&
+    typeof error.message === 'string' &&
+    error.message.includes('delivery_code')
+  ) {
+    const { delivery_code: _dropCode, ...withoutCode } = row;
+    ({ data, error } = await supabase.from('orders').insert(withoutCode).select().single());
   }
 
   if (error) throw error;

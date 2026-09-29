@@ -5,6 +5,7 @@ import { ChevronLeft, Check, XCircle } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
 import { supabase } from '@/app/lib/supabase';
 import { fetchOrderById, type CustomerOrder } from '@/app/lib/customerOrders';
+import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 
 interface ConfirmationScreenProps {
@@ -149,6 +150,12 @@ export function ConfirmationScreen({ orderId, onDone, onBack }: ConfirmationScre
       </div>
 
       <div className="flex-1 max-w-md mx-auto w-full px-4 py-6 pb-8">
+        {!cancelled && status !== 'delivered' && order?.delivery_code && (
+          <div className="mb-6">
+            <DeliveryCodeCard code={order.delivery_code} />
+          </div>
+        )}
+
         {cancelled ? (
           <div className="bg-white rounded-2xl border border-red-100 p-6 text-center mb-6">
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />

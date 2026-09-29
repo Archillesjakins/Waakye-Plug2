@@ -39,7 +39,7 @@ Disallowed examples: release from `picked_up` or `available`; rider self-cancel;
 2. **Release** — only `rider_assigned → available` and clear `rider_id`. Not allowed from other statuses.
 3. **Admin cancel** — allowed from `available | rider_assigned | picked_up`. Always clear `rider_id`. Record `cancel_reason`, `cancelled_at`, `cancelled_by`.
 4. **Cancel-after-moving** (`picked_up → cancelled`) — refund food; customer owes **70% of that order’s delivery fee** on the **next** order via `profiles.pending_delivery_fee_owed` (numeric, default `0`).
-5. **Delivery code** — store `orders.delivery_code_hash` (bcrypt) only. Riders never get plaintext; verify server-side.
+5. **Delivery code** — 4-digit `orders.delivery_code` shown to customer and assigned rider at handoff; `delivery_code_hash` (bcrypt) for `verify-delivery` edge function.
 6. **Grants** — do **not** broadly expand authenticated `UPDATE` on `orders` beyond `(rider_id, status)`. New audit / hash / debt columns are admin or service-role writes.
 
 ## Columns added by Story 1 prep
