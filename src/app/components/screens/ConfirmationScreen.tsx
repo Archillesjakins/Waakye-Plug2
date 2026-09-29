@@ -1,13 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { ChevronLeft, Check, XCircle } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
 import { supabase } from '@/app/lib/supabase';
 import { fetchOrderById, type CustomerOrder } from '@/app/lib/customerOrders';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
-import { formatDeliveryCode, recallDeliveryCode, rememberDeliveryCode } from '@/app/lib/deliveryCode';
+import {
+  clearActiveOrderHandoff,
+  formatDeliveryCode,
+  recallDeliveryCode,
+  rememberActiveOrderHandoff,
+  rememberDeliveryCode,
+} from '@/app/lib/deliveryCode';
 
 const BRAND = '#7a1d1d';
 interface ConfirmationScreenProps {
@@ -15,7 +21,9 @@ interface ConfirmationScreenProps {
   /** From checkout — shown immediately even before order fetch completes. */
   initialDeliveryCode?: string | null;
   onDone: () => void;
+  /** Browse menu — active order + code stay saved until delivered. */
   onBack?: () => void;
+  onHandoffChange?: () => void;
 }
 
 type OrderStatus = 'available' | 'rider_assigned' | 'picked_up' | 'delivered' | 'cancelled';
@@ -81,10 +89,11 @@ function shortOrderRef(id: string): string {
   return id.replace(/-/g, '').slice(-4).toUpperCase();
 }
 
-export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBack }: ConfirmationScreenProps) {
+export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBack, onHandoffChange }: ConfirmationScreenProps) {
   const { lines, totalPrice } = useCart();
   const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [status, setStatus] = useState<OrderStatus>('available');
+  const pinnedCodeRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!orderId) return;
@@ -123,13 +132,26 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
   }, [orderId]);
 
   const deliveryCode = useMemo(() => {
-    if (!orderId) return null;
-    return (
+    if (!orderId) return pinnedCodeRef.current;
+    const next =
       formatDeliveryCode(order?.delivery_code) ??
       formatDeliveryCode(initialDeliveryCode) ??
-      recallDeliveryCode(orderId)
-    );
+      recallDeliveryCode(orderId) ??
+      pinnedCodeRef.current;
+    if (next) pinnedCodeRef.current = next;
+    return next;
   }, [orderId, order?.delivery_code, initialDeliveryCode]);
+
+  useEffect(() => {
+    if (!orderId || !deliveryCode) return;
+    if (status === 'delivered' || status === 'cancelled') {
+      clearActiveOrderHandoff(orderId);
+      onHandoffChange?.();
+      return;
+    }
+    rememberActiveOrderHandoff(orderId, deliveryCode, status);
+    onHandoffChange?.();
+  }, [orderId, deliveryCode, status, onHandoffChange]);
 
   const cancelled = status === 'cancelled';
   const activeStep = cancelled ? 0 : statusToStepIndex(status);
@@ -161,7 +183,7 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
             type="button"
             onClick={onBack ?? onDone}
             className="p-2 -ml-2 rounded-full hover:bg-white/10 transition-colors"
-            aria-label="Back"
+            aria-label={onBack ? 'Continue browsing' : 'Back'}
           >
             <ChevronLeft className="w-6 h-6" />
           </button>

@@ -33,3 +33,53 @@ export function recallDeliveryCode(orderId: string): string | null {
     return null;
   }
 }
+
+const ACTIVE_ORDER_KEY = 'waakye_active_order_handoff';
+
+export type ActiveOrderHandoff = {
+  orderId: string;
+  deliveryCode: string;
+  status?: string;
+};
+
+/** Keeps the in-progress order + code reachable until delivered/cancelled. */
+export function rememberActiveOrderHandoff(orderId: string, code: string, status?: string) {
+  const formatted = formatDeliveryCode(code);
+  if (!orderId || !formatted) return;
+  rememberDeliveryCode(orderId, formatted);
+  try {
+    const payload: ActiveOrderHandoff = { orderId, deliveryCode: formatted, status };
+    sessionStorage.setItem(ACTIVE_ORDER_KEY, JSON.stringify(payload));
+  } catch {
+    /* private mode */
+  }
+}
+
+export function updateActiveOrderHandoffStatus(status: string) {
+  const current = recallActiveOrderHandoff();
+  if (!current) return;
+  rememberActiveOrderHandoff(current.orderId, current.deliveryCode, status);
+}
+
+export function recallActiveOrderHandoff(): ActiveOrderHandoff | null {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_ORDER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActiveOrderHandoff;
+    const code = formatDeliveryCode(parsed.deliveryCode);
+    if (!parsed.orderId || !code) return null;
+    if (parsed.status === 'delivered' || parsed.status === 'cancelled') return null;
+    return { orderId: parsed.orderId, deliveryCode: code, status: parsed.status };
+  } catch {
+    return null;
+  }
+}
+
+export function clearActiveOrderHandoff(orderId?: string) {
+  try {
+    if (orderId) sessionStorage.removeItem(STORAGE_PREFIX + orderId);
+    sessionStorage.removeItem(ACTIVE_ORDER_KEY);
+  } catch {
+    /* ignore */
+  }
+}

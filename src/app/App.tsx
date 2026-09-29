@@ -20,7 +20,15 @@ import { useUser } from '@/app/context/UserContext';
 import { CartProvider, useCart } from '@/app/context/CartContext';
 import { VendorProvider, useVendor } from '@/app/context/VendorContext';
 import { FloatingCartButton } from '@/app/components/FloatingCartButton';
-import { formatDeliveryCode, recallDeliveryCode, rememberDeliveryCode } from '@/app/lib/deliveryCode';
+import { ActiveOrderHandoffBar } from '@/app/components/ActiveOrderHandoffBar';
+import {
+  formatDeliveryCode,
+  recallActiveOrderHandoff,
+  recallDeliveryCode,
+  rememberActiveOrderHandoff,
+  rememberDeliveryCode,
+  type ActiveOrderHandoff,
+} from '@/app/lib/deliveryCode';
 import { createOrder } from '@/app/lib/orders';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 import { Toaster, toast } from 'sonner';
@@ -54,6 +62,7 @@ function AppContent() {
     totalPrice,
     quotedDeliveryFee,
     quotedDistanceKm,
+    totalItems,
   } = useCart();
   const { selectedVendor, clearVendor } = useVendor();
 
@@ -62,6 +71,24 @@ function AppContent() {
   const [orderType, setOrderType] = useState<OrderType>('waakye');
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
   const [lastOrderDeliveryCode, setLastOrderDeliveryCode] = useState<string | null>(null);
+  const [activeHandoff, setActiveHandoff] = useState<ActiveOrderHandoff | null>(() => recallActiveOrderHandoff());
+
+  const refreshActiveHandoff = () => setActiveHandoff(recallActiveOrderHandoff());
+
+  useEffect(() => {
+    refreshActiveHandoff();
+  }, [currentScreen]);
+
+  function openActiveOrderDetails() {
+    const handoff = recallActiveOrderHandoff();
+    if (!handoff) {
+      refreshActiveHandoff();
+      return;
+    }
+    setLastOrderId(handoff.orderId);
+    setLastOrderDeliveryCode(handoff.deliveryCode);
+    setCurrentScreen('confirm');
+  }
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [breakfastOrder, setBreakfastOrder] = useState<Breakfast>({
     drink: 'tea',
@@ -177,7 +204,11 @@ function AppContent() {
       const code = formatDeliveryCode((created as { delivery_code?: string | null }).delivery_code) ?? null;
       setLastOrderId(orderId);
       setLastOrderDeliveryCode(code);
-      if (code) rememberDeliveryCode(orderId, code);
+      if (code) {
+        rememberDeliveryCode(orderId, code);
+        rememberActiveOrderHandoff(orderId, code, 'available');
+        refreshActiveHandoff();
+      }
     } catch (e) {
       console.error('Could not create order', e);
       toast.error('Could not place your order — please try again.');
@@ -189,6 +220,7 @@ function AppContent() {
 
   function handleOrderDone() {
     clearCart();
+    refreshActiveHandoff();
     setCurrentScreen('myOrders');
   }
 
@@ -245,8 +277,11 @@ function AppContent() {
           <MyOrdersScreen
             onBack={() => setCurrentScreen('home')}
             onViewOrder={(id) => {
+              const code = recallDeliveryCode(id);
               setLastOrderId(id);
-              setLastOrderDeliveryCode(recallDeliveryCode(id));
+              setLastOrderDeliveryCode(code);
+              if (code) rememberActiveOrderHandoff(id, code);
+              refreshActiveHandoff();
               setCurrentScreen('confirm');
             }}
             onOrderAgain={() => {
@@ -304,6 +339,7 @@ function AppContent() {
             initialDeliveryCode={lastOrderDeliveryCode}
             onDone={handleOrderDone}
             onBack={() => setCurrentScreen('home')}
+            onHandoffChange={refreshActiveHandoff}
           />
         );
 
@@ -327,6 +363,13 @@ function AppContent() {
       {renderScreen()}
       {canOrder && ['landing', 'home', 'build', 'build2'].includes(currentScreen) && (
         <FloatingCartButton onClick={() => setCurrentScreen('summary')} />
+      )}
+      {activeHandoff && currentScreen !== 'confirm' && (
+        <ActiveOrderHandoffBar
+          handoff={activeHandoff}
+          onOpenOrder={openActiveOrderDetails}
+          cartVisible={canOrder && ['landing', 'home', 'build', 'build2'].includes(currentScreen) && totalItems > 0}
+        />
       )}
     </div>
   );
