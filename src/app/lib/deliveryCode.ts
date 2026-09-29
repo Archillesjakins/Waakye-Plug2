@@ -15,6 +15,11 @@ export function isActiveDeliveryCodeStatus(status: string): boolean {
   return status === 'available' || status === 'rider_assigned' || status === 'picked_up';
 }
 
+export function isOrderHandoffComplete(status: string | undefined, deliveredAt?: string | null): boolean {
+  if (status === 'delivered' || status === 'cancelled') return true;
+  return !!deliveredAt;
+}
+
 const STORAGE_PREFIX = 'waakye_delivery_code_';
 
 export function rememberDeliveryCode(orderId: string, code: string) {
@@ -82,4 +87,25 @@ export function clearActiveOrderHandoff(orderId?: string) {
   } catch {
     /* ignore */
   }
+}
+
+/** Drop the bottom bar when My Orders (or any order list) shows this handoff as finished. */
+export function reconcileActiveOrderHandoffFromOrders(
+  orders: { id: string; status: string; delivered_at?: string | null }[],
+): boolean {
+  const handoff = recallActiveOrderHandoff();
+  if (!handoff) return false;
+
+  const row = orders.find((o) => o.id === handoff.orderId);
+  if (!row) return false;
+
+  if (isOrderHandoffComplete(row.status, row.delivered_at)) {
+    clearActiveOrderHandoff(handoff.orderId);
+    return true;
+  }
+
+  if (row.status !== handoff.status) {
+    rememberActiveOrderHandoff(handoff.orderId, handoff.deliveryCode, row.status);
+  }
+  return false;
 }

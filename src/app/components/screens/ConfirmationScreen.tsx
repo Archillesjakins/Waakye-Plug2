@@ -10,6 +10,7 @@ import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 import {
   clearActiveOrderHandoff,
   formatDeliveryCode,
+  isOrderHandoffComplete,
   recallDeliveryCode,
   rememberActiveOrderHandoff,
   rememberDeliveryCode,
@@ -144,7 +145,7 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
 
   useEffect(() => {
     if (!orderId || !deliveryCode) return;
-    if (status === 'delivered' || status === 'cancelled') {
+    if (isOrderHandoffComplete(status, order?.delivered_at)) {
       clearActiveOrderHandoff(orderId);
       onHandoffChange?.();
       return;

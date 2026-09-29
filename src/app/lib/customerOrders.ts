@@ -35,6 +35,20 @@ async function selectOrderById(orderId: string, select: string) {
   return supabase.from('orders').select(select).eq('id', orderId).maybeSingle();
 }
 
+/** Lightweight poll for handoff bar — avoids nested joins that can fail on detail fetch. */
+export async function fetchOrderStatusSnapshot(
+  orderId: string,
+): Promise<{ status: string; delivered_at: string | null } | null> {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('status, delivered_at')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as { status: string; delivered_at: string | null } | null;
+}
+
 export async function fetchOrderById(orderId: string): Promise<CustomerOrder | null> {
   let { data, error } = await selectOrderById(orderId, ORDER_DETAIL_SELECT);
 

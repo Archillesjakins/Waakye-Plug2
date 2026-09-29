@@ -71,6 +71,7 @@ Rider copy of this doc: [Waakye-plug-rider/docs/DELIVERY_CONFIRMATION_CODE.md](h
 ## Ops checklist
 
 - [ ] Run `20260929_orders_delivery_code.sql` on production Supabase
+- [ ] Run `20260929_verify_delivery_code_rpc.sql` and update **verify-delivery** to call RPC `verify_delivery_code_hash(p_code, p_hash)` instead of Deno `bcrypt.compare` (pgcrypto hashes from the trigger do not always match Deno bcrypt)
 - [ ] Redeploy **customer** + **rider** on Vercel
 - [ ] Redeploy Supabase function **`verify-delivery`**
 - [ ] Smoke test: place order → customer sees code → rider sees same code → verify completes delivery

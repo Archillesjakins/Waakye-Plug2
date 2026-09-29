@@ -6,13 +6,19 @@ import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapP
 import { fetchMyOrders, type CustomerOrder } from '@/app/lib/customerOrders';
 import { useUser } from '@/app/context/UserContext';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
-import { formatDeliveryCode, isActiveDeliveryCodeStatus, recallDeliveryCode } from '@/app/lib/deliveryCode';
+import {
+  formatDeliveryCode,
+  isActiveDeliveryCodeStatus,
+  recallDeliveryCode,
+  reconcileActiveOrderHandoffFromOrders,
+} from '@/app/lib/deliveryCode';
 import { supabase } from '@/app/lib/supabase';
 
 interface MyOrdersScreenProps {
   onBack: () => void;
   onViewOrder?: (orderId: string) => void;
   onOrderAgain?: () => void;
+  onHandoffChange?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Package; color: string; bg: string }> = {
@@ -31,7 +37,7 @@ function formatDate(iso: string) {
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersScreenProps) {
+export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain, onHandoffChange }: MyOrdersScreenProps) {
   const { userId } = useUser();
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +50,10 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersSc
     async function load() {
       try {
         const data = await fetchMyOrders(userId);
-        if (!cancelled) setOrders(data);
+        if (!cancelled) {
+          setOrders(data);
+          if (reconcileActiveOrderHandoffFromOrders(data)) onHandoffChange?.();
+        }
       } catch (err) {
         console.error(err);
         if (!cancelled) setError('Could not load your orders right now.');

@@ -2,15 +2,37 @@
 
 import { useEffect } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { fetchOrderById } from '@/app/lib/customerOrders';
+import { fetchMyOrders, fetchOrderStatusSnapshot } from '@/app/lib/customerOrders';
 import {
   clearActiveOrderHandoff,
+  isOrderHandoffComplete,
   recallActiveOrderHandoff,
   rememberActiveOrderHandoff,
 } from '@/app/lib/deliveryCode';
 
+type SyncArgs = {
+  orderId: string | undefined;
+  userId: string | undefined;
+  onChange: () => void;
+};
+
+function applyStatus(orderId: string, status: string | undefined, deliveredAt: string | null | undefined, onChange: () => void) {
+  if (isOrderHandoffComplete(status, deliveredAt)) {
+    clearActiveOrderHandoff(orderId);
+    onChange();
+    return true;
+  }
+
+  const handoff = recallActiveOrderHandoff();
+  if (handoff?.orderId === orderId && status && handoff.status !== status) {
+    rememberActiveOrderHandoff(orderId, handoff.deliveryCode, status);
+    onChange();
+  }
+  return false;
+}
+
 /** Keeps session handoff in sync with Supabase while the bottom bar is active (any screen). */
-export function useActiveOrderHandoffStatusSync(orderId: string | undefined, onChange: () => void) {
+export function useActiveOrderHandoffStatusSync({ orderId, userId, onChange }: SyncArgs) {
   useEffect(() => {
     if (!orderId) return;
 
@@ -18,20 +40,21 @@ export function useActiveOrderHandoffStatusSync(orderId: string | undefined, onC
 
     async function syncFromServer() {
       try {
-        const row = await fetchOrderById(orderId);
-        if (!alive || !row) return;
+        const snapshot = await fetchOrderStatusSnapshot(orderId);
+        if (!alive) return;
 
-        const status = row.status;
-        if (status === 'delivered' || status === 'cancelled') {
-          clearActiveOrderHandoff(orderId);
-          onChange();
+        if (snapshot) {
+          applyStatus(orderId, snapshot.status, snapshot.delivered_at, onChange);
           return;
         }
 
-        const handoff = recallActiveOrderHandoff();
-        if (handoff?.orderId === orderId && handoff.status !== status) {
-          rememberActiveOrderHandoff(orderId, handoff.deliveryCode, status);
-          onChange();
+        if (userId) {
+          const orders = await fetchMyOrders(userId);
+          if (!alive) return;
+          const row = orders.find((o) => o.id === orderId);
+          if (row) {
+            applyStatus(orderId, row.status, row.delivered_at, onChange);
+          }
         }
       } catch (err) {
         console.error('Could not sync active order status', err);
@@ -40,21 +63,30 @@ export function useActiveOrderHandoffStatusSync(orderId: string | undefined, onC
 
     syncFromServer();
 
+    const channelName = userId ? `active-handoff-${userId}` : `active-handoff-id-${orderId}`;
+    const filter = userId ? `customer_id=eq.${userId}` : `id=eq.${orderId}`;
+
     const channel = supabase
-      .channel(`active-handoff-status-${orderId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        () => {
-          syncFromServer();
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter },
+        (payload) => {
+          const row = payload.new as { id?: string; status?: string; delivered_at?: string | null };
+          if (row?.id && row.id !== orderId) return;
+          if (row?.id === orderId) {
+            applyStatus(orderId, row.status, row.delivered_at ?? null, onChange);
+            return;
+          }
+          void syncFromServer();
         },
       )
       .subscribe();
 
-    const interval = setInterval(syncFromServer, 20_000);
+    const interval = setInterval(syncFromServer, 5_000);
 
     const onVisible = () => {
-      if (document.visibilityState === 'visible') syncFromServer();
+      if (document.visibilityState === 'visible') void syncFromServer();
     };
     document.addEventListener('visibilitychange', onVisible);
 
@@ -64,5 +96,5 @@ export function useActiveOrderHandoffStatusSync(orderId: string | undefined, onC
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [orderId, onChange]);
+  }, [orderId, userId, onChange]);
 }

@@ -25,10 +25,12 @@ import {
   formatDeliveryCode,
   recallActiveOrderHandoff,
   recallDeliveryCode,
+  reconcileActiveOrderHandoffFromOrders,
   rememberActiveOrderHandoff,
   rememberDeliveryCode,
   type ActiveOrderHandoff,
 } from '@/app/lib/deliveryCode';
+import { fetchMyOrders } from '@/app/lib/customerOrders';
 import { createOrder } from '@/app/lib/orders';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 import { useActiveOrderHandoffStatusSync } from '@/app/hooks/useActiveOrderHandoffStatusSync';
@@ -80,7 +82,28 @@ function AppContent() {
     refreshActiveHandoff();
   }, [currentScreen, refreshActiveHandoff]);
 
-  useActiveOrderHandoffStatusSync(activeHandoff?.orderId, refreshActiveHandoff);
+  useActiveOrderHandoffStatusSync({
+    orderId: activeHandoff?.orderId,
+    userId: userId || undefined,
+    onChange: refreshActiveHandoff,
+  });
+
+  useEffect(() => {
+    if (!userId || !activeHandoff?.orderId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const orders = await fetchMyOrders(userId);
+        if (cancelled) return;
+        if (reconcileActiveOrderHandoffFromOrders(orders)) refreshActiveHandoff();
+      } catch {
+        /* best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, activeHandoff?.orderId, refreshActiveHandoff]);
 
   function openActiveOrderDetails() {
     const handoff = recallActiveOrderHandoff();
@@ -279,6 +302,7 @@ function AppContent() {
         return (
           <MyOrdersScreen
             onBack={() => setCurrentScreen('home')}
+            onHandoffChange={refreshActiveHandoff}
             onViewOrder={(id) => {
               const code = recallDeliveryCode(id);
               setLastOrderId(id);
