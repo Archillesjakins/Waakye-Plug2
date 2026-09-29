@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getPlatformOrderingStatus, canPlaceOrders as canPlaceOrdersNow } from '@/app/utils/timeUtils';
 import { vendorAcceptingOrders } from '@/app/lib/vendorHours';
 import { Breakfast } from '@/app/types/orderTypes';
@@ -31,6 +31,7 @@ import {
 } from '@/app/lib/deliveryCode';
 import { createOrder } from '@/app/lib/orders';
 import type { MenuItem } from '@/app/lib/vendorMenu';
+import { useActiveOrderHandoffStatusSync } from '@/app/hooks/useActiveOrderHandoffStatusSync';
 import { Toaster, toast } from 'sonner';
 
 type Screen = 'landing' | 'home' | 'itemDetail' | 'build' | 'build2' | 'summary' | 'confirm' | 'myOrders';
@@ -73,11 +74,13 @@ function AppContent() {
   const [lastOrderDeliveryCode, setLastOrderDeliveryCode] = useState<string | null>(null);
   const [activeHandoff, setActiveHandoff] = useState<ActiveOrderHandoff | null>(() => recallActiveOrderHandoff());
 
-  const refreshActiveHandoff = () => setActiveHandoff(recallActiveOrderHandoff());
+  const refreshActiveHandoff = useCallback(() => setActiveHandoff(recallActiveOrderHandoff()), []);
 
   useEffect(() => {
     refreshActiveHandoff();
-  }, [currentScreen]);
+  }, [currentScreen, refreshActiveHandoff]);
+
+  useActiveOrderHandoffStatusSync(activeHandoff?.orderId, refreshActiveHandoff);
 
   function openActiveOrderDetails() {
     const handoff = recallActiveOrderHandoff();
