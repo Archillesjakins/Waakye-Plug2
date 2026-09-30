@@ -2,7 +2,22 @@
 
 import { getGhanaMinutesSinceMidnight } from '@/app/lib/vendorHours';
 
-export const PLATFORM_CLOSE_HOUR = 21; // 9:00 PM — last orders before this time
+/** Last orders before this time (Africa/Accra). Testing: 11:30 PM — revert to 21:00 for production. */
+export const PLATFORM_CLOSE_HOUR = 23;
+export const PLATFORM_CLOSE_MINUTE = 30;
+
+export function getPlatformCloseMinutesSinceMidnight(): number {
+  return PLATFORM_CLOSE_HOUR * 60 + PLATFORM_CLOSE_MINUTE;
+}
+
+export function formatPlatformCloseTimeLabel(): string {
+  const h = PLATFORM_CLOSE_HOUR;
+  const m = PLATFORM_CLOSE_MINUTE;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  const minPart = m === 0 ? ':00' : `:${String(m).padStart(2, '0')}`;
+  return `${hour12}${minPart} ${period}`;
+}
 
 export interface PlatformOrderingStatus {
   isOpen: boolean;
@@ -28,7 +43,7 @@ export function getPlatformOrderingStatus(): PlatformOrderingStatus {
 
   const now = getNow();
   const currentMinutes = getGhanaMinutesSinceMidnight(now);
-  const closeMinutes = PLATFORM_CLOSE_HOUR * 60;
+  const closeMinutes = getPlatformCloseMinutesSinceMidnight();
 
   const isOpen = currentMinutes < closeMinutes;
 

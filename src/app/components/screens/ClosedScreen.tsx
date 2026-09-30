@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { Clock, Moon } from 'lucide-react';
 import { toast } from 'sonner';
 import { CountdownTimer } from '@/app/components/CountdownTimer';
-import { PLATFORM_CLOSE_HOUR } from '@/app/utils/timeUtils';
+import { formatPlatformCloseTimeLabel } from '@/app/utils/timeUtils';
 
 interface ClosedScreenProps {
   timeUntilOpen: number;
@@ -10,12 +10,7 @@ interface ClosedScreenProps {
 }
 
 export function ClosedScreen({ timeUntilOpen, onViewOrders }: ClosedScreenProps) {
-  const closeLabel =
-    PLATFORM_CLOSE_HOUR === 12
-      ? '12:00 PM'
-      : PLATFORM_CLOSE_HOUR > 12
-        ? `${PLATFORM_CLOSE_HOUR - 12}:00 PM`
-        : `${PLATFORM_CLOSE_HOUR}:00 AM`;
+  const closeLabel = formatPlatformCloseTimeLabel();
 
   return (
     <motion.div

@@ -3,7 +3,7 @@ import { CountdownTimer } from '@/app/components/CountdownTimer';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { ArrowRight, Clock, Soup, Croissant, Store } from 'lucide-react';
 import { useVendor } from '@/app/context/VendorContext';
-import { PLATFORM_CLOSE_HOUR } from '@/app/utils/timeUtils';
+import { formatPlatformCloseTimeLabel } from '@/app/utils/timeUtils';
 
 interface LandingScreenProps {
   timeUntilClose: number;
@@ -32,8 +32,7 @@ export function LandingScreen({
   const canOrder = platformIsOpen && vendorIsOpen;
   const greeting = greetingForHour(new Date().getHours());
 
-  const closeLabel =
-    PLATFORM_CLOSE_HOUR > 12 ? `${PLATFORM_CLOSE_HOUR - 12}:00 PM` : `${PLATFORM_CLOSE_HOUR}:00 AM`;
+  const closeLabel = formatPlatformCloseTimeLabel();
 
   return (
     <motion.div
