@@ -3,6 +3,7 @@
 import { Package } from 'lucide-react';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
 import type { ActiveOrderHandoff } from '@/app/lib/deliveryCode';
+import { customerOrderStatusLabel } from '@/app/lib/orderStatusLabels';
 
 type ActiveOrderHandoffBarProps = {
   handoff: ActiveOrderHandoff;
@@ -27,7 +28,9 @@ export function ActiveOrderHandoffBar({ handoff, onOpenOrder, cartVisible }: Act
         <span className="block text-[10px] font-bold uppercase tracking-wide text-white/85">
           Active order — delivery code
         </span>
-        <span className="block text-xs text-white/90 mt-0.5 truncate">Tap to open order details (code stays here)</span>
+        <span className="block text-xs text-white/90 mt-0.5 truncate">
+          {customerOrderStatusLabel(handoff.status)} · tap for full details
+        </span>
       </span>
       <DeliveryCodeCard code={handoff.deliveryCode} compact />
     </button>

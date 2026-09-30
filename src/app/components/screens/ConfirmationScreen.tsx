@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ChevronLeft, Check, XCircle } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
-import { supabase } from '@/app/lib/supabase';
-import { fetchOrderById, type CustomerOrder } from '@/app/lib/customerOrders';
+import { useLiveOrderDetail } from '@/app/context/CustomerOrdersContext';
+import type { CustomerOrder } from '@/app/lib/customerOrders';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 import {
@@ -92,45 +92,13 @@ function shortOrderRef(id: string): string {
 
 export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBack, onHandoffChange }: ConfirmationScreenProps) {
   const { lines, totalPrice } = useCart();
-  const [order, setOrder] = useState<CustomerOrder | null>(null);
-  const [status, setStatus] = useState<OrderStatus>('available');
+  const order = useLiveOrderDetail(orderId);
+  const status = (order?.status ?? 'available') as OrderStatus;
   const pinnedCodeRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!orderId) return;
-
-    let alive = true;
-
-    async function load() {
-      try {
-        const row = await fetchOrderById(orderId);
-        if (!alive || !row) return;
-        setOrder(row);
-        setStatus(row.status as OrderStatus);
-        if (row.delivery_code) rememberDeliveryCode(orderId, row.delivery_code);
-      } catch (err) {
-        console.error('Could not load order', err);
-      }
-    }
-
-    load();
-
-    const channel = supabase
-      .channel(`order-status-${orderId}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        () => {
-          load();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      alive = false;
-      supabase.removeChannel(channel);
-    };
-  }, [orderId]);
+    if (orderId && order?.delivery_code) rememberDeliveryCode(orderId, order.delivery_code);
+  }, [orderId, order?.delivery_code]);
 
   const deliveryCode = useMemo(() => {
     if (!orderId) return pinnedCodeRef.current;

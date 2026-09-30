@@ -106,6 +106,7 @@ export function reconcileActiveOrderHandoffFromOrders(
 
   if (row.status !== handoff.status) {
     rememberActiveOrderHandoff(handoff.orderId, handoff.deliveryCode, row.status);
+    return true;
   }
   return false;
 }

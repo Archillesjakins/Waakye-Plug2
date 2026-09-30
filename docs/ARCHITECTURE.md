@@ -8,7 +8,7 @@ Customers:
 2. Grant location → choose an **approved** vendor within **6 km**
 3. Browse menu / build waakye → cart → delivery checkout
 4. Order inserted as `status: 'available'`
-5. Track status on Confirmation / My Orders via Realtime
+5. Track status on Confirmation / My Orders via one shared Realtime channel (`CustomerOrdersContext` — see [REALTIME_AUDIT.md](REALTIME_AUDIT.md))
 
 Riders claim and advance status; admin manages vendors/menus. Shared project: `verncapitxzsgcughvil`.
 

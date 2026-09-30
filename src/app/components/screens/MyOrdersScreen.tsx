@@ -1,24 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapPin, RotateCcw } from 'lucide-react';
-import { fetchMyOrders, type CustomerOrder } from '@/app/lib/customerOrders';
-import { useUser } from '@/app/context/UserContext';
+import type { CustomerOrder } from '@/app/lib/customerOrders';
+import { useCustomerOrders } from '@/app/context/CustomerOrdersContext';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
-import {
-  formatDeliveryCode,
-  isActiveDeliveryCodeStatus,
-  recallDeliveryCode,
-  reconcileActiveOrderHandoffFromOrders,
-} from '@/app/lib/deliveryCode';
-import { supabase } from '@/app/lib/supabase';
+import { formatDeliveryCode, isActiveDeliveryCodeStatus, recallDeliveryCode } from '@/app/lib/deliveryCode';
 
 interface MyOrdersScreenProps {
   onBack: () => void;
   onViewOrder?: (orderId: string) => void;
   onOrderAgain?: () => void;
-  onHandoffChange?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: typeof Package; color: string; bg: string }> = {
@@ -37,48 +29,8 @@ function formatDate(iso: string) {
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain, onHandoffChange }: MyOrdersScreenProps) {
-  const { userId } = useUser();
-  const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const data = await fetchMyOrders(userId);
-        if (!cancelled) {
-          setOrders(data);
-          if (reconcileActiveOrderHandoffFromOrders(data)) onHandoffChange?.();
-        }
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) setError('Could not load your orders right now.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    // Real-time: any change to this customer's own orders (a rider gets
-    // assigned, picks up, delivers) shows up immediately, without needing
-    // to reopen the screen.
-    const channel = supabase
-      .channel(`my-orders-${userId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders', filter: `customer_id=eq.${userId}` },
-        () => load()
-      )
-      .subscribe();
-
-    // Fallback safety net in case the realtime connection ever drops.
-    const interval = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(interval); supabase.removeChannel(channel); };
-  }, [userId]);
+export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersScreenProps) {
+  const { orders, loading, error } = useCustomerOrders();
 
   return (
     <div className="min-h-[100dvh] bg-[#fefaf4] [webkit-tap-highlight-color:transparent]">
@@ -107,7 +59,7 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain, onHandoffCha
           </div>
         ) : (
           <div className="space-y-3">
-            {orders.map((order, i) => {
+            {orders.map((order: CustomerOrder, i: number) => {
               const config = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending;
               const StatusIcon = config.icon;
               const riderName = order.riders?.profiles?.full_name;

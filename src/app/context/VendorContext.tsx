@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { getApprovedVendors, getVendorById, distanceKm, type Vendor } from '@/app/lib/vendorMenu';
+import { supabase } from '@/app/lib/supabase';
 
 export type { Vendor } from '@/app/lib/vendorMenu';
 
@@ -119,12 +120,31 @@ export function VendorProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Keep is_open in sync while the customer is browsing (admin may toggle closed).
+  // Live vendor row (is_open, daily hours) — no reload when admin toggles.
   useEffect(() => {
     if (!selectedVendor) return;
+
     refreshSelectedVendor();
-    const interval = setInterval(refreshSelectedVendor, 30_000);
-    return () => clearInterval(interval);
+
+    const channel = supabase
+      .channel(`vendor-live-${selectedVendor.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'vendors', filter: `id=eq.${selectedVendor.id}` },
+        (payload) => {
+          const row = payload.new as Partial<Vendor> & { id?: string };
+          if (!row?.id) return;
+          setSelectedVendor((prev) => (prev ? { ...prev, ...row } : prev));
+          setVendors((prev) => prev.map((v) => (v.id === row.id ? { ...v, ...row } : v)));
+        },
+      )
+      .subscribe();
+
+    const interval = setInterval(refreshSelectedVendor, 120_000);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when vendor id changes only
   }, [selectedVendor?.id]);
 

@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Store, MapPin, Search, Loader2, LocateFixed, UtensilsCrossed } from 'lucide-react';
 import { useVendor, type Vendor } from '@/app/context/VendorContext';
 import { vendorAcceptingOrders } from '@/app/lib/vendorHours';
+import { supabase } from '@/app/lib/supabase';
 
 interface VendorSelectScreenProps {
   onSelect: () => void;
@@ -16,11 +17,20 @@ export function VendorSelectScreen({ onSelect }: VendorSelectScreenProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'open' | 'nearby'>('all');
 
-  // Pick up hours / is_open edits from admin without requiring a full page reload.
+  // Live vendor list (hours, is_open, new approvals).
   useEffect(() => {
     refreshVendors();
-    const interval = setInterval(refreshVendors, 30_000);
-    return () => clearInterval(interval);
+    const channel = supabase
+      .channel('vendor-list-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vendors' }, () => {
+        void refreshVendors();
+      })
+      .subscribe();
+    const interval = setInterval(refreshVendors, 120_000);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [refreshVendors]);
 
   function handlePick(vendor: Vendor) {

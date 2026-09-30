@@ -25,15 +25,13 @@ import {
   formatDeliveryCode,
   recallActiveOrderHandoff,
   recallDeliveryCode,
-  reconcileActiveOrderHandoffFromOrders,
   rememberActiveOrderHandoff,
   rememberDeliveryCode,
   type ActiveOrderHandoff,
 } from '@/app/lib/deliveryCode';
-import { fetchMyOrders } from '@/app/lib/customerOrders';
+import { CustomerOrdersProvider, useCustomerOrders } from '@/app/context/CustomerOrdersContext';
 import { createOrder } from '@/app/lib/orders';
 import type { MenuItem } from '@/app/lib/vendorMenu';
-import { useActiveOrderHandoffStatusSync } from '@/app/hooks/useActiveOrderHandoffStatusSync';
 import { Toaster, toast } from 'sonner';
 
 type Screen = 'landing' | 'home' | 'itemDetail' | 'build' | 'build2' | 'summary' | 'confirm' | 'myOrders';
@@ -82,29 +80,6 @@ function AppContent() {
     refreshActiveHandoff();
   }, [currentScreen, refreshActiveHandoff]);
 
-  useActiveOrderHandoffStatusSync({
-    orderId: activeHandoff?.orderId,
-    userId: userId || undefined,
-    onChange: refreshActiveHandoff,
-  });
-
-  useEffect(() => {
-    if (!userId || !activeHandoff?.orderId) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const orders = await fetchMyOrders(userId);
-        if (cancelled) return;
-        if (reconcileActiveOrderHandoffFromOrders(orders)) refreshActiveHandoff();
-      } catch {
-        /* best-effort */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, activeHandoff?.orderId, refreshActiveHandoff]);
-
   function openActiveOrderDetails() {
     const handoff = recallActiveOrderHandoff();
     if (!handoff) {
@@ -136,6 +111,8 @@ function AppContent() {
     clearCart();
     clearVendor();
   }
+
+  const goMyOrders = () => setCurrentScreen('myOrders');
 
   function guardOrderingAction(): boolean {
     if (!platformStatus.isOpen) {
@@ -173,14 +150,124 @@ function AppContent() {
     );
   }
 
-  if (!selectedVendor) {
-    return (
-      <>
-        <Toaster position="top-center" richColors />
+  return (
+    <CustomerOrdersProvider userId={userId} onHandoffChange={refreshActiveHandoff}>
+      <Toaster position="top-center" richColors />
+      {!selectedVendor ? (
         <VendorSelectScreen onSelect={() => setCurrentScreen('landing')} />
-      </>
-    );
-  }
+      ) : (
+        <AppOrderingFlow
+          activeHandoff={activeHandoff}
+          refreshActiveHandoff={refreshActiveHandoff}
+          openActiveOrderDetails={openActiveOrderDetails}
+          currentScreen={currentScreen}
+          setCurrentScreen={setCurrentScreen}
+          platformStatus={platformStatus}
+          vendorIsOpen={vendorIsOpen}
+          canOrder={canOrder}
+          guardOrderingAction={guardOrderingAction}
+          handleSwitchVendor={handleSwitchVendor}
+          goMyOrders={goMyOrders}
+          selectedItem={selectedItem}
+          setSelectedItem={setSelectedItem}
+          breakfastOrder={breakfastOrder}
+          setBreakfastOrder={setBreakfastOrder}
+          setOrderType={setOrderType}
+          lastOrderId={lastOrderId}
+          lastOrderDeliveryCode={lastOrderDeliveryCode}
+          setLastOrderId={setLastOrderId}
+          setLastOrderDeliveryCode={setLastOrderDeliveryCode}
+          totalItems={totalItems}
+          userId={userId}
+          selectedVendor={selectedVendor}
+          lines={lines}
+          totalPrice={totalPrice}
+          deliveryLat={deliveryLat}
+          deliveryLng={deliveryLng}
+          customerLocation={customerLocation}
+          paymentMethod={paymentMethod}
+          quotedDeliveryFee={quotedDeliveryFee}
+          quotedDistanceKm={quotedDistanceKm}
+          clearCart={clearCart}
+        />
+      )}
+    </CustomerOrdersProvider>
+  );
+}
+
+type AppOrderingFlowProps = {
+  activeHandoff: ActiveOrderHandoff | null;
+  refreshActiveHandoff: () => void;
+  openActiveOrderDetails: () => void;
+  currentScreen: Screen;
+  setCurrentScreen: (s: Screen) => void;
+  platformStatus: ReturnType<typeof getPlatformOrderingStatus>;
+  vendorIsOpen: boolean;
+  canOrder: boolean;
+  guardOrderingAction: () => boolean;
+  handleSwitchVendor: () => void;
+  goMyOrders: () => void;
+  selectedItem: MenuItem | null;
+  setSelectedItem: (i: MenuItem | null) => void;
+  breakfastOrder: Breakfast;
+  setBreakfastOrder: (b: Breakfast) => void;
+  setOrderType: (t: OrderType) => void;
+  lastOrderId: string | null;
+  lastOrderDeliveryCode: string | null;
+  setLastOrderId: (id: string | null) => void;
+  setLastOrderDeliveryCode: (c: string | null) => void;
+  totalItems: number;
+  userId: string;
+  selectedVendor: NonNullable<ReturnType<typeof useVendor>['selectedVendor']>;
+  lines: import('@/app/context/CartContext').OrderLineItem[];
+  totalPrice: number;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  customerLocation: string;
+  paymentMethod: import('@/app/context/CartContext').PaymentMethod;
+  quotedDeliveryFee: number;
+  quotedDistanceKm: number | null;
+  clearCart: () => void;
+};
+
+function AppOrderingFlow(props: AppOrderingFlowProps) {
+  const {
+    activeHandoff,
+    refreshActiveHandoff,
+    openActiveOrderDetails,
+    currentScreen,
+    setCurrentScreen,
+    platformStatus,
+    vendorIsOpen,
+    canOrder,
+    guardOrderingAction,
+    handleSwitchVendor,
+    goMyOrders,
+    selectedItem,
+    setSelectedItem,
+    breakfastOrder,
+    setBreakfastOrder,
+    setOrderType,
+    lastOrderId,
+    lastOrderDeliveryCode,
+    setLastOrderId,
+    setLastOrderDeliveryCode,
+    totalItems,
+    userId,
+    selectedVendor,
+    lines,
+    totalPrice,
+    deliveryLat,
+    deliveryLng,
+    customerLocation,
+    paymentMethod,
+    quotedDeliveryFee,
+    quotedDistanceKm,
+    clearCart,
+  } = props;
+
+  const { addToCart } = useCart();
+  const { refresh: refreshOrders } = useCustomerOrders();
 
   function handleWaakyeAddToCart(items: import('@/app/context/CartContext').OrderLineItem[]) {
     if (!selectedVendor || !guardOrderingAction()) return;
@@ -235,6 +322,7 @@ function AppContent() {
         rememberActiveOrderHandoff(orderId, code, 'available');
         refreshActiveHandoff();
       }
+      void refreshOrders();
     } catch (e) {
       console.error('Could not create order', e);
       toast.error('Could not place your order — please try again.');
@@ -249,8 +337,6 @@ function AppContent() {
     refreshActiveHandoff();
     setCurrentScreen('myOrders');
   }
-
-  const goMyOrders = () => setCurrentScreen('myOrders');
 
   const renderScreen = () => {
     const onOrderingFlow = ORDERING_SCREENS.includes(currentScreen);
@@ -302,7 +388,6 @@ function AppContent() {
         return (
           <MyOrdersScreen
             onBack={() => setCurrentScreen('home')}
-            onHandoffChange={refreshActiveHandoff}
             onViewOrder={(id) => {
               const code = recallDeliveryCode(id);
               setLastOrderId(id);
@@ -386,7 +471,6 @@ function AppContent() {
 
   return (
     <div className="size-full">
-      <Toaster position="top-center" richColors />
       {renderScreen()}
       {canOrder && ['landing', 'home', 'build', 'build2'].includes(currentScreen) && (
         <FloatingCartButton onClick={() => setCurrentScreen('summary')} />
