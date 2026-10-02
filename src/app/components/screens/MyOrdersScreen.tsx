@@ -2,25 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapPin, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Package, Loader2, MapPin, RotateCcw, Bike } from 'lucide-react';
 import { fetchMyOrders, type CustomerOrder } from '@/app/lib/customerOrders';
 import { useUser } from '@/app/context/UserContext';
 import { supabase } from '@/app/lib/supabase';
+import { STATUS_CONFIG, getStatusLabel } from '@/app/lib/orderStatusLabels';
 
 interface MyOrdersScreenProps {
   onBack: () => void;
   onOrderAgain?: () => void;
 }
-
-const STATUS_CONFIG: Record<string, { label: string; icon: typeof Package; color: string; bg: string }> = {
-  pending: { label: 'Order Placed', icon: Clock, color: 'text-gray-500', bg: 'bg-gray-100' },
-  available: { label: 'Looking for a Rider', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-  ready: { label: 'Looking for a Rider', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-  rider_assigned: { label: 'Rider Assigned', icon: Bike, color: 'text-blue-600', bg: 'bg-blue-50' },
-  picked_up: { label: 'On the Way', icon: Bike, color: 'text-[#7a1d1d]', bg: 'bg-[#7a1d1d]/10' },
-  delivered: { label: 'Delivered', icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  cancelled: { label: 'Cancelled', icon: XCircle, color: 'text-red-500', bg: 'bg-red-50' },
-};
 
 function formatDate(iso: string) {
   const date = new Date(iso);
@@ -96,7 +87,7 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
         ) : (
           <div className="space-y-3">
             {orders.map((order, i) => {
-              const config = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending;
+              const config = STATUS_CONFIG[order.status] ?? { label: getStatusLabel(order.status), icon: Package, color: 'text-gray-500', bg: 'bg-gray-100' };
               const StatusIcon = config.icon;
               const riderName = order.riders?.profiles?.full_name;
 
@@ -132,7 +123,7 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">
-                        {order.status === 'cancelled' ? '—' : 'Waiting for a rider'}
+                        {order.status === 'cancelled' ? '—' : getStatusLabel('available')}
                       </span>
                     )}
                     <span className="font-bold text-sm text-[#7a1d1d]">GH₵{order.total_amount}</span>
