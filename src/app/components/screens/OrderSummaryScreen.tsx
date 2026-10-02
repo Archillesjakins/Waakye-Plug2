@@ -11,6 +11,8 @@ import { useCart, CartLine, lineUnitPrice } from '@/app/context/CartContext';
 import { SERVICE_FEE } from '@/app/types/orderTypes';
 import { useVendor } from '@/app/context/VendorContext';
 import { quoteDeliveryFee } from '@/app/lib/deliveryPricing';
+import { supabase } from '@/app/lib/supabase';
+import { useUser } from '@/app/context/UserContext';
 
 interface OrderSummaryScreenProps {
   onBack: () => void;
@@ -51,8 +53,31 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
     setQuotedDeliveryFee,
     quotedDistanceKm,
     setQuotedDistanceKm,
+    pendingDeliveryFeeOwed,
+    setPendingDeliveryFeeOwed,
   } = useCart();
   const { selectedVendor, refreshSelectedVendor } = useVendor();
+  const { userId } = useUser();
+
+  // Fetch pending delivery fee owed on mount
+  useEffect(() => {
+    if (!userId) return;
+
+    supabase
+      .from('profiles')
+      .select('pending_delivery_fee_owed')
+      .eq('id', userId)
+      .single()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Could not fetch pending delivery fee:', error);
+          return;
+        }
+        if (data?.pending_delivery_fee_owed) {
+          setPendingDeliveryFeeOwed(Number(data.pending_delivery_fee_owed));
+        }
+      });
+  }, [userId, setPendingDeliveryFeeOwed]);
 
   useEffect(() => {
     void refreshSelectedVendor();
@@ -511,6 +536,17 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
                   <span className="text-gray-500">Service Fee</span>
                   <span className="text-gray-700">GH₵{SERVICE_FEE}</span>
                 </div>
+                {pendingDeliveryFeeOwed > 0 && (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-orange-600 font-medium">Outstanding Delivery Fee</span>
+                      <span className="text-orange-600 font-medium">GH₵{pendingDeliveryFeeOwed.toFixed(2)}</span>
+                    </div>
+                    <p className="text-xs text-orange-600 italic">
+                      From a previous cancelled order (applied to this order)
+                    </p>
+                  </>
+                )}
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                   <span className="font-bold">Total</span>
                   <span className="text-2xl font-bold text-[#7a1d1d]">GH₵{totalPrice}</span>

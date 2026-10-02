@@ -64,6 +64,8 @@ function AppContent() {
     quotedDeliveryFee,
     quotedDistanceKm,
     totalItems,
+    pendingDeliveryFeeOwed,
+    setPendingDeliveryFeeOwed,
   } = useCart();
   const { selectedVendor, clearVendor } = useVendor();
 
@@ -189,6 +191,8 @@ function AppContent() {
           quotedDeliveryFee={quotedDeliveryFee}
           quotedDistanceKm={quotedDistanceKm}
           clearCart={clearCart}
+          pendingDeliveryFeeOwed={pendingDeliveryFeeOwed}
+          setPendingDeliveryFeeOwed={setPendingDeliveryFeeOwed}
         />
       )}
     </CustomerOrdersProvider>
@@ -228,6 +232,8 @@ type AppOrderingFlowProps = {
   quotedDeliveryFee: number;
   quotedDistanceKm: number | null;
   clearCart: () => void;
+  pendingDeliveryFeeOwed: number;
+  setPendingDeliveryFeeOwed: (amount: number) => void;
 };
 
 function AppOrderingFlow(props: AppOrderingFlowProps) {
@@ -264,6 +270,8 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
     quotedDeliveryFee,
     quotedDistanceKm,
     clearCart,
+    pendingDeliveryFeeOwed,
+    setPendingDeliveryFeeOwed,
   } = props;
 
   const { addToCart } = useCart();
@@ -322,6 +330,38 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
         rememberActiveOrderHandoff(orderId, code, 'available');
         refreshActiveHandoff();
       }
+      
+      // Clear pending delivery fee debt if customer had outstanding amount
+      if (pendingDeliveryFeeOwed > 0) {
+        try {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+          
+          const response = await fetch(
+            `${supabaseUrl}/functions/v1/clear-delivery-fee-debt`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ customer_id: userId }),
+            }
+          );
+          
+          if (!response.ok) {
+            console.error('Failed to clear debt:', await response.text());
+            // Non-critical: debt will be applied again next order if this fails
+          } else {
+            // Reset local state
+            setPendingDeliveryFeeOwed(0);
+          }
+        } catch (debtError) {
+          console.error('Error calling debt clearing function:', debtError);
+          // Non-critical error, order was still created successfully
+        }
+      }
+      
       void refreshOrders();
     } catch (e) {
       console.error('Could not create order', e);
