@@ -57,6 +57,8 @@ interface CartContextType {
   itemsSubtotal: number;
   totalItems: number;
   totalPrice: number;
+  pendingDeliveryFeeOwed: number;
+  setPendingDeliveryFeeOwed: (amount: number) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -78,6 +80,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [quotedDeliveryFee, setQuotedDeliveryFee] = useState(DELIVERY_FEE_STANDARD_GHS);
   const [quotedDistanceKm, setQuotedDistanceKm] = useState<number | null>(null);
+  const [pendingDeliveryFeeOwed, setPendingDeliveryFeeOwed] = useState(0);
 
   const addToCart = (vendorId: string, items: OrderLineItem[]) => {
     const id = `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -123,7 +126,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const deliveryComponent =
     deliveryMode === 'delivery' ? quotedDeliveryFee : 0;
   const totalPrice =
-    lines.length === 0 ? 0 : itemsSubtotal + deliveryComponent + SERVICE_FEE;
+    lines.length === 0 ? 0 : itemsSubtotal + deliveryComponent + SERVICE_FEE + pendingDeliveryFeeOwed;
 
   return (
     <CartContext.Provider
@@ -137,6 +140,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         quotedDeliveryFee, setQuotedDeliveryFee,
         quotedDistanceKm, setQuotedDistanceKm,
         itemsSubtotal, totalItems, totalPrice,
+        pendingDeliveryFeeOwed, setPendingDeliveryFeeOwed,
       }}
     >
       {children}
