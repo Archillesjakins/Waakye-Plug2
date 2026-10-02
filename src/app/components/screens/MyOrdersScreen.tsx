@@ -1,27 +1,18 @@
 'use client';
 
 import { motion } from 'motion/react';
-import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapPin, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Package, Bike, Loader2, MapPin, RotateCcw } from 'lucide-react';
 import type { CustomerOrder } from '@/app/lib/customerOrders';
 import { useCustomerOrders } from '@/app/context/CustomerOrdersContext';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
 import { formatDeliveryCode, isActiveDeliveryCodeStatus, recallDeliveryCode } from '@/app/lib/deliveryCode';
+import { getStatusConfig, getStatusLabel } from '@/app/lib/orderStatusLabels';
 
 interface MyOrdersScreenProps {
   onBack: () => void;
   onViewOrder?: (orderId: string) => void;
   onOrderAgain?: () => void;
 }
-
-const STATUS_CONFIG: Record<string, { label: string; icon: typeof Package; color: string; bg: string }> = {
-  pending: { label: 'Order Placed', icon: Clock, color: 'text-gray-500', bg: 'bg-gray-100' },
-  available: { label: 'Looking for a Rider', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-  ready: { label: 'Looking for a Rider', icon: Clock, color: 'text-amber-600', bg: 'bg-amber-50' },
-  rider_assigned: { label: 'Rider Assigned', icon: Bike, color: 'text-blue-600', bg: 'bg-blue-50' },
-  picked_up: { label: 'On the Way', icon: Bike, color: 'text-[#7a1d1d]', bg: 'bg-[#7a1d1d]/10' },
-  delivered: { label: 'Delivered', icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  cancelled: { label: 'Cancelled', icon: XCircle, color: 'text-red-500', bg: 'bg-red-50' },
-};
 
 function formatDate(iso: string) {
   const date = new Date(iso);
@@ -60,7 +51,7 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersSc
         ) : (
           <div className="space-y-3">
             {orders.map((order: CustomerOrder, i: number) => {
-              const config = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending;
+              const config = getStatusConfig(order.status);
               const StatusIcon = config.icon;
               const riderName = order.riders?.profiles?.full_name;
               const handoffCode =
@@ -117,7 +108,7 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersSc
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">
-                        {order.status === 'cancelled' ? '—' : 'Waiting for a rider'}
+                        {order.status === 'cancelled' ? '—' : getStatusLabel('available')}
                       </span>
                     )}
                     <span className="font-bold text-sm text-[#7a1d1d]">GH₵{order.total_amount}</span>
