@@ -1,14 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { ChevronLeft, Package, Bike, CheckCircle2, XCircle, Clock, Loader2, MapPin, RotateCcw } from 'lucide-react';
-import { fetchMyOrders, type CustomerOrder } from '@/app/lib/customerOrders';
-import { useUser } from '@/app/context/UserContext';
-import { supabase } from '@/app/lib/supabase';
+import type { CustomerOrder } from '@/app/lib/customerOrders';
+import { useCustomerOrders } from '@/app/context/CustomerOrdersContext';
+import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
+import { formatDeliveryCode, isActiveDeliveryCodeStatus, recallDeliveryCode } from '@/app/lib/deliveryCode';
 
 interface MyOrdersScreenProps {
   onBack: () => void;
+  onViewOrder?: (orderId: string) => void;
   onOrderAgain?: () => void;
 }
 
@@ -28,45 +29,8 @@ function formatDate(iso: string) {
     date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
-  const { userId } = useUser();
-  const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const data = await fetchMyOrders(userId);
-        if (!cancelled) setOrders(data);
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) setError('Could not load your orders right now.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    load();
-    // Real-time: any change to this customer's own orders (a rider gets
-    // assigned, picks up, delivers) shows up immediately, without needing
-    // to reopen the screen.
-    const channel = supabase
-      .channel(`my-orders-${userId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders', filter: `customer_id=eq.${userId}` },
-        () => load()
-      )
-      .subscribe();
-
-    // Fallback safety net in case the realtime connection ever drops.
-    const interval = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(interval); supabase.removeChannel(channel); };
-  }, [userId]);
+export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersScreenProps) {
+  const { orders, loading, error } = useCustomerOrders();
 
   return (
     <div className="min-h-[100dvh] bg-[#fefaf4] [webkit-tap-highlight-color:transparent]">
@@ -95,18 +59,32 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
           </div>
         ) : (
           <div className="space-y-3">
-            {orders.map((order, i) => {
+            {orders.map((order: CustomerOrder, i: number) => {
               const config = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending;
               const StatusIcon = config.icon;
               const riderName = order.riders?.profiles?.full_name;
+              const handoffCode =
+                formatDeliveryCode(order.delivery_code) ?? recallDeliveryCode(order.id);
 
               return (
                 <motion.div
                   key={order.id}
+                  role={onViewOrder ? 'button' : undefined}
+                  tabIndex={onViewOrder ? 0 : undefined}
+                  onClick={onViewOrder ? () => onViewOrder(order.id) : undefined}
+                  onKeyDown={
+                    onViewOrder
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') onViewOrder(order.id);
+                        }
+                      : undefined
+                  }
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(i * 0.05, 0.3) }}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4"
+                  className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-left w-full ${
+                    onViewOrder ? 'cursor-pointer hover:border-[#7a1d1d]/25 hover:shadow-md transition-all' : ''
+                  }`}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -123,6 +101,13 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
                     <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     <span className="line-clamp-2">{order.delivery_address}</span>
                   </div>
+
+                  {isActiveDeliveryCodeStatus(order.status) && handoffCode && (
+                    <div className="flex items-center justify-between bg-[#faf6ee] rounded-xl px-3 py-2 mb-3 text-xs border border-[#7a1d1d]/10">
+                      <span className="font-medium text-[#7a1d1d]">Delivery code for rider</span>
+                      <DeliveryCodeCard code={handoffCode} compact />
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between pt-3 border-t border-gray-50">
                     {riderName ? (
@@ -141,7 +126,11 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
                   {onOrderAgain && (
                     <div className="flex justify-end pt-2">
                       <button
-                        onClick={onOrderAgain}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOrderAgain();
+                        }}
                         className="flex items-center gap-1.5 bg-[#7a1d1d]/5 text-[#7a1d1d] font-bold text-xs px-3 py-2 rounded-xl active:scale-95 transition-transform hover:bg-[#7a1d1d]/10"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />

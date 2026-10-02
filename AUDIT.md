@@ -141,3 +141,23 @@ Lumora decision: tracker shows **friendly labels mapped to the real statuses** (
 **Verification:** `scripts/syntax-gate.cjs` — 75 files parsed, 0 failed. **Production build ✅ SUCCEEDED 2026-09-15 ~01:00** (2nd attempt; 1st wedged mid-transform at 0.48 GB free RAM — playbook confirms retry pattern works): fresh `dist/assets/index-CU_s9DH_.js` (613kB, down from 630kB — dead-code removal shows in the bundle) + `index-5NNaxt36.css` (104kB). Chunk-size warning unchanged (known pre-launch item: code splitting).
 
 **Still needing Lumora's decision:** P3 (breakfast flow scope), P4 (opening-hours window vs always-open).
+
+### 2026-09-16 — Uber-style delivery coordinates at checkout ✅ code complete — ⚠️ migration apply pending
+Customer dropoff pin is now first-class on orders (rider nav source of truth), not text-only address:
+
+- **Migration** `schema/migrations/2026-09-16_order_delivery_coords.sql` — adds `orders.delivery_lat` / `orders.delivery_lng` (`double precision`) with comments. **Must be applied on live Supabase before merge/deploy.**
+- **`createOrder`** (`src/app/lib/orders.ts`) accepts + inserts `delivery_lat` / `delivery_lng`.
+- **Checkout** `OrderSummaryScreen`: high-accuracy geolocation (`enableHighAccuracy: true`); warns if accuracy > ~250m (Precise Location copy); Leaflet map + draggable burgundy (`#7a1d1d`) pin; default center **Ho** `6.6008, 0.4713` (never Accra); coords required before Confirm; passed through CartContext into `createOrder` with address/phone/payment.
+- Deps: `leaflet` + `@types/leaflet`. Types: optional `deliveryLat`/`deliveryLng` on `OrderItem`.
+
+### 2026-09-18 — Checkout pin always commits delivery_lat/lng ✅
+Root cause of rider missing customer pin (E2E order *Sunshine Waakye* / Near Awatime Junction @ ~15:12 UTC had NULL coords): `OrderSummaryScreen` drew a Ho default Leaflet pin but **intentionally did not** `setDeliveryCoords` until GPS succeeded or the user dragged. If geolocation hung/failed silently, the map still looked “pinned” while cart coords stayed null — a footgun even with App.tsx’s finite-coords gate.
+
+**Fix (Uber-style):** on map init, after creating the restored-or-Ho marker, immediately `setDeliveryCoords` to that pin’s lat/lng so cart always has finite coords. GPS can still refine when accuracy is good; drag still nudges. Accuracy >250m warning remains advisory (does not block submit once coords exist). Reconfirmed: `App.tsx` still refuses `createOrder` without finite `deliveryLat`/`deliveryLng`; `orders.ts` insert still writes `delivery_lat` / `delivery_lng`.
+
+## 2026-09-18 — Rider location GRANTs
+
+- Added `schema/migrations/2026-09-18_rider_location_grants.sql` to version live
+  `GRANT UPDATE (current_lat, current_lng, location_updated_at)` on `riders` for
+  `authenticated` (needed after login for GPS). Apply in Supabase SQL Editor;
+  do not re-run `2026-09-12_rls_lockdown.sql` as-is without these grants.

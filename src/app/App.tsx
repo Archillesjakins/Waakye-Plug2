@@ -1,32 +1,45 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { checkOrderingStatus } from '@/app/utils/timeUtils';
+import { useState, useEffect, useCallback } from 'react';
+import { getPlatformOrderingStatus, canPlaceOrders as canPlaceOrdersNow } from '@/app/utils/timeUtils';
+import { vendorAcceptingOrders } from '@/app/lib/vendorHours';
 import { Breakfast } from '@/app/types/orderTypes';
 import { LandingScreen } from '@/app/components/screens/LandingScreen';
 import { HomeScreen } from '@/app/components/screens/HomeScreen';
 import { ItemDetailScreen } from '@/app/components/screens/ItemDetailScreen';
 import { ClosedScreen } from '@/app/components/screens/ClosedScreen';
+import { VendorClosedScreen } from '@/app/components/screens/VendorClosedScreen';
 import { BuildWaakyeScreen } from '@/app/components/screens/BuildWaakyeScreen';
 import { SBlinkspage } from '@/app/components/screens/SBlinkspage';
 import { OrderSummaryScreen } from '@/app/components/screens/OrderSummaryScreen';
 import { ConfirmationScreen } from '@/app/components/screens/ConfirmationScreen';
-import { MyOrdersScreen } from '@/app/components/screens/MyOrdersScreen';import { UsernameScreen } from '@/app/components/screens/UsernameScreen';
-import { VendorSelectScreen } from '@/app/components/screens/VendorSelectScreen';
 import { MyOrdersScreen } from '@/app/components/screens/MyOrdersScreen';
+import { UsernameScreen } from '@/app/components/screens/UsernameScreen';
+import { VendorSelectScreen } from '@/app/components/screens/VendorSelectScreen';
 import { useUser } from '@/app/context/UserContext';
 import { CartProvider, useCart } from '@/app/context/CartContext';
 import { VendorProvider, useVendor } from '@/app/context/VendorContext';
 import { FloatingCartButton } from '@/app/components/FloatingCartButton';
+import { ActiveOrderHandoffBar } from '@/app/components/ActiveOrderHandoffBar';
+import {
+  formatDeliveryCode,
+  recallActiveOrderHandoff,
+  recallDeliveryCode,
+  rememberActiveOrderHandoff,
+  rememberDeliveryCode,
+  type ActiveOrderHandoff,
+} from '@/app/lib/deliveryCode';
+import { CustomerOrdersProvider, useCustomerOrders } from '@/app/context/CustomerOrdersContext';
 import { createOrder } from '@/app/lib/orders';
+import { supabase } from '@/app/lib/supabase';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 import { Toaster, toast } from 'sonner';
 
-type Screen = 'landing' | 'home' | 'itemDetail' | 'closed' | 'build' | 'build2' | 'summary' | 'confirm' | 'myOrders';
+type Screen = 'landing' | 'home' | 'itemDetail' | 'build' | 'build2' | 'summary' | 'confirm' | 'myOrders';
 type OrderType = 'waakye' | 'breakfast';
 
-// CartProvider has to sit above everything that calls useCart(), so App itself
-// is now just a thin wrapper and the real logic lives in AppContent.
+const ORDERING_SCREENS: Screen[] = ['landing', 'home', 'itemDetail', 'build', 'build2', 'summary'];
+
 export default function App() {
   return (
     <CartProvider>
@@ -38,44 +51,88 @@ export default function App() {
 }
 
 function AppContent() {
-  const { hasUser, userId, phone, username, ready } = useUser();
-  const { addToCart, clearCart, itemsSubtotal, lines, deliveryMode, customerLocation, paymentMethod, totalPrice } = useCart();
+  const { hasUser, userId, ready } = useUser();
+  const {
+    addToCart,
+    clearCart,
+    lines,
+    deliveryMode,
+    customerLocation,
+    deliveryLat,
+    deliveryLng,
+    paymentMethod,
+    totalPrice,
+    quotedDeliveryFee,
+    quotedDistanceKm,
+    totalItems,
+    pendingDeliveryFeeOwed,
+    setPendingDeliveryFeeOwed,
+  } = useCart();
   const { selectedVendor, clearVendor } = useVendor();
 
   const [currentScreen, setCurrentScreen] = useState<Screen>('landing');
-  const [orderingStatus, setOrderingStatus] = useState(checkOrderingStatus());
+  const [platformStatus, setPlatformStatus] = useState(getPlatformOrderingStatus());
   const [orderType, setOrderType] = useState<OrderType>('waakye');
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+  const [lastOrderDeliveryCode, setLastOrderDeliveryCode] = useState<string | null>(null);
+  const [activeHandoff, setActiveHandoff] = useState<ActiveOrderHandoff | null>(() => recallActiveOrderHandoff());
+
+  const refreshActiveHandoff = useCallback(() => setActiveHandoff(recallActiveOrderHandoff()), []);
+
+  useEffect(() => {
+    refreshActiveHandoff();
+  }, [currentScreen, refreshActiveHandoff]);
+
+  function openActiveOrderDetails() {
+    const handoff = recallActiveOrderHandoff();
+    if (!handoff) {
+      refreshActiveHandoff();
+      return;
+    }
+    setLastOrderId(handoff.orderId);
+    setLastOrderDeliveryCode(handoff.deliveryCode);
+    setCurrentScreen('confirm');
+  }
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [breakfastOrder, setBreakfastOrder] = useState<Breakfast>({
     drink: 'tea',
     extras: [],
-    deliveryMode: 'pickup',
+    deliveryMode: 'delivery',
   });
 
-  // ── Time-based open/close polling ──────────────────────────────────────────
+  const vendorIsOpen = selectedVendor ? vendorAcceptingOrders(selectedVendor) : false;
+  const canOrder = canPlaceOrdersNow(platformStatus.isOpen, vendorIsOpen);
+
   useEffect(() => {
-    const status = checkOrderingStatus();
-    setOrderingStatus(status);
-    if (!status.isOpen && currentScreen === 'landing') {
-      setCurrentScreen('closed');
-    }
-
-    const interval = setInterval(() => {
-      const newStatus = checkOrderingStatus();
-      setOrderingStatus(newStatus);
-      if (!newStatus.isOpen && ['landing', 'home', 'itemDetail', 'build', 'build2', 'summary'].includes(currentScreen)) {
-        setCurrentScreen('closed');
-      }
-      if (newStatus.isOpen && currentScreen === 'closed') {
-        setCurrentScreen('landing');
-      }
-    }, 10000);
-
+    const tick = () => setPlatformStatus(getPlatformOrderingStatus());
+    tick();
+    const interval = setInterval(tick, 10_000);
     return () => clearInterval(interval);
-  }, [currentScreen]);
+  }, []);
 
-  // ── Wait for the anonymous session + profile lookup to resolve ─────────────
+  function handleSwitchVendor() {
+    clearCart();
+    clearVendor();
+  }
+
+  const goMyOrders = () => setCurrentScreen('myOrders');
+
+  function guardOrderingAction(): boolean {
+    if (!platformStatus.isOpen) {
+      toast.error('Waakye Plug is closed for tonight — ordering opens at midnight.');
+      return false;
+    }
+    if (!selectedVendor?.is_open) {
+      toast.error(`${selectedVendor?.business_name ?? 'This vendor'} is closed (admin toggle).`);
+      return false;
+    }
+    if (!vendorIsOpen) {
+      toast.error(`${selectedVendor?.business_name ?? 'This vendor'} is outside their ordering hours.`);
+      return false;
+    }
+    return true;
+  }
+
   if (!ready) {
     return (
       <>
@@ -87,7 +144,6 @@ function AppContent() {
     );
   }
 
-  // ── Username gate — show before anything else ──────────────────────────────
   if (!hasUser) {
     return (
       <>
@@ -97,52 +153,235 @@ function AppContent() {
     );
   }
 
-  // ── Vendor gate — pick who you're ordering from before browsing a menu ─────
-  if (!selectedVendor) {
-    return (
-      <>
-        <Toaster position="top-center" richColors />
+  return (
+    <CustomerOrdersProvider userId={userId} onHandoffChange={refreshActiveHandoff}>
+      <Toaster position="top-center" richColors />
+      {!selectedVendor ? (
         <VendorSelectScreen onSelect={() => setCurrentScreen('landing')} />
-      </>
-    );
-  }
+      ) : (
+        <AppOrderingFlow
+          activeHandoff={activeHandoff}
+          refreshActiveHandoff={refreshActiveHandoff}
+          openActiveOrderDetails={openActiveOrderDetails}
+          currentScreen={currentScreen}
+          setCurrentScreen={setCurrentScreen}
+          platformStatus={platformStatus}
+          vendorIsOpen={vendorIsOpen}
+          canOrder={canOrder}
+          guardOrderingAction={guardOrderingAction}
+          handleSwitchVendor={handleSwitchVendor}
+          goMyOrders={goMyOrders}
+          selectedItem={selectedItem}
+          setSelectedItem={setSelectedItem}
+          breakfastOrder={breakfastOrder}
+          setBreakfastOrder={setBreakfastOrder}
+          setOrderType={setOrderType}
+          lastOrderId={lastOrderId}
+          lastOrderDeliveryCode={lastOrderDeliveryCode}
+          setLastOrderId={setLastOrderId}
+          setLastOrderDeliveryCode={setLastOrderDeliveryCode}
+          totalItems={totalItems}
+          userId={userId}
+          selectedVendor={selectedVendor}
+          lines={lines}
+          totalPrice={totalPrice}
+          deliveryLat={deliveryLat}
+          deliveryLng={deliveryLng}
+          customerLocation={customerLocation}
+          paymentMethod={paymentMethod}
+          quotedDeliveryFee={quotedDeliveryFee}
+          quotedDistanceKm={quotedDistanceKm}
+          clearCart={clearCart}
+          pendingDeliveryFeeOwed={pendingDeliveryFeeOwed}
+          setPendingDeliveryFeeOwed={setPendingDeliveryFeeOwed}
+        />
+      )}
+    </CustomerOrdersProvider>
+  );
+}
 
-  // ── Waakye builder → cart. Breakfast temporarily disabled (see LandingScreen
-  // wiring below) since SBlinkspage hasn't been converted to this model yet.
+type AppOrderingFlowProps = {
+  activeHandoff: ActiveOrderHandoff | null;
+  refreshActiveHandoff: () => void;
+  openActiveOrderDetails: () => void;
+  currentScreen: Screen;
+  setCurrentScreen: (s: Screen) => void;
+  platformStatus: ReturnType<typeof getPlatformOrderingStatus>;
+  vendorIsOpen: boolean;
+  canOrder: boolean;
+  guardOrderingAction: () => boolean;
+  handleSwitchVendor: () => void;
+  goMyOrders: () => void;
+  selectedItem: MenuItem | null;
+  setSelectedItem: (i: MenuItem | null) => void;
+  breakfastOrder: Breakfast;
+  setBreakfastOrder: (b: Breakfast) => void;
+  setOrderType: (t: OrderType) => void;
+  lastOrderId: string | null;
+  lastOrderDeliveryCode: string | null;
+  setLastOrderId: (id: string | null) => void;
+  setLastOrderDeliveryCode: (c: string | null) => void;
+  totalItems: number;
+  userId: string;
+  selectedVendor: NonNullable<ReturnType<typeof useVendor>['selectedVendor']>;
+  lines: import('@/app/context/CartContext').OrderLineItem[];
+  totalPrice: number;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  customerLocation: string;
+  paymentMethod: import('@/app/context/CartContext').PaymentMethod;
+  quotedDeliveryFee: number;
+  quotedDistanceKm: number | null;
+  clearCart: () => void;
+  pendingDeliveryFeeOwed: number;
+  setPendingDeliveryFeeOwed: (amount: number) => void;
+};
+
+function AppOrderingFlow(props: AppOrderingFlowProps) {
+  const {
+    activeHandoff,
+    refreshActiveHandoff,
+    openActiveOrderDetails,
+    currentScreen,
+    setCurrentScreen,
+    platformStatus,
+    vendorIsOpen,
+    canOrder,
+    guardOrderingAction,
+    handleSwitchVendor,
+    goMyOrders,
+    selectedItem,
+    setSelectedItem,
+    breakfastOrder,
+    setBreakfastOrder,
+    setOrderType,
+    lastOrderId,
+    lastOrderDeliveryCode,
+    setLastOrderId,
+    setLastOrderDeliveryCode,
+    totalItems,
+    userId,
+    selectedVendor,
+    lines,
+    totalPrice,
+    deliveryLat,
+    deliveryLng,
+    customerLocation,
+    paymentMethod,
+    quotedDeliveryFee,
+    quotedDistanceKm,
+    clearCart,
+    pendingDeliveryFeeOwed,
+    setPendingDeliveryFeeOwed,
+  } = props;
+
+  const { addToCart } = useCart();
+  const { refresh: refreshOrders } = useCustomerOrders();
+
   function handleWaakyeAddToCart(items: import('@/app/context/CartContext').OrderLineItem[]) {
-    if (!selectedVendor) return;
+    if (!selectedVendor || !guardOrderingAction()) return;
     addToCart(selectedVendor.id, items);
     setCurrentScreen('summary');
   }
 
-  // ── Single item added from the browse/detail flow: add + drop back into
-  // browsing rather than jumping straight to checkout, matching how the
-  // Bolt-style reference lets you keep shopping after adding one thing.
   function handleItemAddToCart(items: import('@/app/context/CartContext').OrderLineItem[]) {
-    if (!selectedVendor) return;
+    if (!selectedVendor || !guardOrderingAction()) return;
     addToCart(selectedVendor.id, items);
-    toast.success(`Added to cart`);
+    toast.success('Added to cart');
     setCurrentScreen('home');
   }
 
-  // ── Order confirmed: write the real order ───────────────────────────────
   async function handleOrderConfirmed() {
-    if (!selectedVendor) return;
+    if (!selectedVendor || !guardOrderingAction()) return;
+
+    // Validate that we have coordinates
+    if (deliveryLat === null || deliveryLng === null) {
+      toast.error('Please set a delivery location');
+      return;
+    }
 
     try {
+      if (
+        typeof deliveryLat !== 'number' ||
+        typeof deliveryLng !== 'number' ||
+        !Number.isFinite(deliveryLat) ||
+        !Number.isFinite(deliveryLng)
+      ) {
+        toast.error('Set your dropoff pin on the map before confirming.');
+        return;
+      }
+
       const created = await createOrder({
         customerId: userId,
         vendorId: selectedVendor.id,
         lines,
         totalAmount: totalPrice,
         deliveryAddress: customerLocation,
+        deliveryLat,
+        deliveryLng,
         paymentMethod,
+        deliveryLat,
+        deliveryLng,
+        quotedDeliveryFee,
+        quotedDistanceKm,
       });
-      setLastOrderId(created.id);
+      const orderId = created?.id as string | undefined;
+      if (!orderId) {
+        toast.error('Order was created but id was missing — check My Orders.');
+        setCurrentScreen('myOrders');
+        return;
+      }
+      const code = formatDeliveryCode((created as { delivery_code?: string | null }).delivery_code) ?? null;
+      setLastOrderId(orderId);
+      setLastOrderDeliveryCode(code);
+      if (code) {
+        rememberDeliveryCode(orderId, code);
+        rememberActiveOrderHandoff(orderId, code, 'available');
+        refreshActiveHandoff();
+      }
+      
+      // Clear pending delivery fee debt if customer had outstanding amount
+      if (pendingDeliveryFeeOwed > 0) {
+        try {
+          // Get user's JWT access token from current session
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          if (!session?.access_token) {
+            console.error('No active session for debt clearing');
+            // Non-critical: debt will be applied again next order if this fails
+          } else {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            
+            const response = await fetch(
+              `${supabaseUrl}/functions/v1/clear-delivery-fee-debt`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${session.access_token}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
+            
+            if (!response.ok) {
+              console.error('Failed to clear debt:', await response.text());
+              // Non-critical: debt will be applied again next order if this fails
+            } else {
+              // Reset local state
+              setPendingDeliveryFeeOwed(0);
+            }
+          }
+        } catch (debtError) {
+          console.error('Error calling debt clearing function:', debtError);
+          // Non-critical error, order was still created successfully
+        }
+      }
+      
+      void refreshOrders();
     } catch (e) {
       console.error('Could not create order', e);
       toast.error('Could not place your order — please try again.');
-      return; // stay on the summary screen, nothing was actually sent
+      return;
     }
 
     setCurrentScreen('confirm');
@@ -150,37 +389,53 @@ function AppContent() {
 
   function handleOrderDone() {
     clearCart();
-    // Single order-history destination: MyOrdersScreen reads live Supabase
-    // data with realtime status updates. The duplicate OrderHistoryScreen
-    // (same table, no live updates) was removed — see AUDIT.md P2.
+    refreshActiveHandoff();
     setCurrentScreen('myOrders');
   }
 
-  const handleTimerComplete = () => setCurrentScreen('closed');
-
   const renderScreen = () => {
-    if (!orderingStatus.isOpen && !['closed', 'confirm', 'myOrders'].includes(currentScreen)){
-      return <ClosedScreen timeUntilOpen={orderingStatus.timeUntilOpen} />;
+    const onOrderingFlow = ORDERING_SCREENS.includes(currentScreen);
+
+    if (!platformStatus.isOpen && onOrderingFlow) {
+      return <ClosedScreen timeUntilOpen={platformStatus.timeUntilOpen} onViewOrders={goMyOrders} />;
+    }
+
+    if (platformStatus.isOpen && !vendorIsOpen && onOrderingFlow) {
+      return (
+        <VendorClosedScreen onSwitchVendor={handleSwitchVendor} onViewOrders={goMyOrders} />
+      );
     }
 
     switch (currentScreen) {
       case 'landing':
         return (
           <LandingScreen
-            timeUntilClose={orderingStatus.timeUntilClose}
-            onStart={() => { setOrderType('waakye'); setCurrentScreen('home'); }}
+            timeUntilClose={platformStatus.timeUntilClose}
+            platformIsOpen={platformStatus.isOpen}
+            vendorIsOpen={vendorIsOpen}
+            onStart={() => {
+              if (!guardOrderingAction()) return;
+              setOrderType('waakye');
+              setCurrentScreen('home');
+            }}
             onBuild={() => toast('Breakfast ordering is coming soon!')}
-            onTimerComplete={handleTimerComplete}
-            onSwitchVendor={clearVendor}
+            onSwitchVendor={handleSwitchVendor}
           />
         );
       case 'home':
         return (
           <HomeScreen
-            onOpenItem={(item) => { setSelectedItem(item); setCurrentScreen('itemDetail'); }}
-            onBuildOwn={() => setCurrentScreen('build')}
-            onSwitchVendor={clearVendor}
-            onMyOrders={() => setCurrentScreen('myOrders')}
+            onOpenItem={(item) => {
+              if (!guardOrderingAction()) return;
+              setSelectedItem(item);
+              setCurrentScreen('itemDetail');
+            }}
+            onBuildOwn={() => {
+              if (!guardOrderingAction()) return;
+              setCurrentScreen('build');
+            }}
+            onSwitchVendor={handleSwitchVendor}
+            onMyOrders={goMyOrders}
           />
         );
 
@@ -188,9 +443,16 @@ function AppContent() {
         return (
           <MyOrdersScreen
             onBack={() => setCurrentScreen('home')}
+            onViewOrder={(id) => {
+              const code = recallDeliveryCode(id);
+              setLastOrderId(id);
+              setLastOrderDeliveryCode(code);
+              if (code) rememberActiveOrderHandoff(id, code);
+              refreshActiveHandoff();
+              setCurrentScreen('confirm');
+            }}
             onOrderAgain={() => {
-              // "Order again" opens a fresh builder — the builder fetches
-              // fresh menu data rather than accepting a prefilled order.
+              if (!guardOrderingAction()) return;
               setOrderType('waakye');
               setCurrentScreen('build');
             }}
@@ -210,9 +472,6 @@ function AppContent() {
           />
         );
 
-      case 'closed':
-        return <ClosedScreen timeUntilOpen={orderingStatus.timeUntilOpen} />;
-
       case 'build':
         return (
           <BuildWaakyeScreen
@@ -222,10 +481,6 @@ function AppContent() {
         );
 
       case 'build2':
-        // Dormant for now — breakfast hasn't been converted to the DB-driven
-        // cart model yet, and this screen is unreachable from LandingScreen
-        // until it is. Left in place rather than deleted so SBlinkspage isn't
-        // silently broken if it's reached some other way.
         return (
           <SBlinkspage
             order={breakfastOrder}
@@ -236,12 +491,11 @@ function AppContent() {
         );
 
       case 'summary':
-        // No more order/orderType/onUpdateOrder props — OrderSummaryScreen
-        // reads everything straight from useCart().
         return (
           <OrderSummaryScreen
             onBack={() => setCurrentScreen('home')}
             onConfirm={handleOrderConfirmed}
+            canPlaceOrders={canOrder}
           />
         );
 
@@ -249,16 +503,22 @@ function AppContent() {
         return (
           <ConfirmationScreen
             orderId={lastOrderId}
+            initialDeliveryCode={lastOrderDeliveryCode}
             onDone={handleOrderDone}
+            onBack={() => setCurrentScreen('home')}
+            onHandoffChange={refreshActiveHandoff}
           />
         );
 
       default:
         return (
           <LandingScreen
-            timeUntilClose={orderingStatus.timeUntilClose}
-            onStart={() => setCurrentScreen('build')}
-            onTimerComplete={handleTimerComplete}
+            timeUntilClose={platformStatus.timeUntilClose}
+            platformIsOpen={platformStatus.isOpen}
+            vendorIsOpen={vendorIsOpen}
+            onStart={() => setCurrentScreen('home')}
+            onBuild={() => toast('Breakfast ordering is coming soon!')}
+            onSwitchVendor={handleSwitchVendor}
           />
         );
     }
@@ -266,10 +526,16 @@ function AppContent() {
 
   return (
     <div className="size-full">
-      <Toaster position="top-center" richColors />
       {renderScreen()}
-      {['landing', 'home', 'build', 'build2'].includes(currentScreen) && (
+      {canOrder && ['landing', 'home', 'build', 'build2'].includes(currentScreen) && (
         <FloatingCartButton onClick={() => setCurrentScreen('summary')} />
+      )}
+      {activeHandoff && currentScreen !== 'confirm' && (
+        <ActiveOrderHandoffBar
+          handoff={activeHandoff}
+          onOpenOrder={openActiveOrderDetails}
+          cartVisible={canOrder && ['landing', 'home', 'build', 'build2'].includes(currentScreen) && totalItems > 0}
+        />
       )}
     </div>
   );

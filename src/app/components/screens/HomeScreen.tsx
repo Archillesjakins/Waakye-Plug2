@@ -18,6 +18,7 @@ import { getVendorMenu, type MenuItem } from '@/app/lib/vendorMenu';
 import { MenuItemThumbnail } from '@/app/components/MenuItemThumbnail';
 import { useCart } from '@/app/context/CartContext';
 import { toast } from 'sonner';
+import { supabase } from '@/app/lib/supabase';
 
 interface HomeScreenProps {
   onOpenItem: (item: MenuItem) => void;
@@ -52,7 +53,23 @@ export function HomeScreen({ onOpenItem, onBuildOwn, onSwitchVendor, onMyOrders 
     }
 
     load();
-    return () => { cancelled = true; };
+
+    const vendorId = selectedVendor.id;
+    const channel = supabase
+      .channel(`vendor-menu-${vendorId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'vendor_menu_items', filter: `vendor_id=eq.${vendorId}` },
+        () => {
+          void load();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, [selectedVendor]);
 
   // The browse grid only ever shows fixed, standalone items (Combos).

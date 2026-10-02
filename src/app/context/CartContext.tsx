@@ -1,7 +1,8 @@
 'use client';
 
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { DELIVERY_FEE, SERVICE_FEE } from '@/app/types/orderTypes';
+import { SERVICE_FEE } from '@/app/types/orderTypes';
+import { DELIVERY_FEE_STANDARD_GHS } from '@/app/lib/deliveryPricing';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 
 // Flat shape matching exactly what orders.items needs in Supabase —
@@ -39,12 +40,25 @@ interface CartContextType {
   setCustomerPhone: (phone: string) => void;
   customerLocation: string;
   setCustomerLocation: (loc: string) => void;
+  /** Customer-confirmed dropoff pin (rider nav source of truth). */
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  setDeliveryCoords: (lat: number, lng: number) => void;
+  clearDeliveryCoords: () => void;
   paymentMethod: PaymentMethod;
   setPaymentMethod: (method: PaymentMethod) => void;
+
+  /** Distance-based quote (updated on checkout map). */
+  quotedDeliveryFee: number;
+  setQuotedDeliveryFee: (fee: number) => void;
+  quotedDistanceKm: number | null;
+  setQuotedDistanceKm: (km: number | null) => void;
 
   itemsSubtotal: number;
   totalItems: number;
   totalPrice: number;
+  pendingDeliveryFeeOwed: number;
+  setPendingDeliveryFeeOwed: (amount: number) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -61,7 +75,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerLocation, setCustomerLocation] = useState('');
+  const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+  const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+  const [quotedDeliveryFee, setQuotedDeliveryFee] = useState(DELIVERY_FEE_STANDARD_GHS);
+  const [quotedDistanceKm, setQuotedDistanceKm] = useState<number | null>(null);
+  const [pendingDeliveryFeeOwed, setPendingDeliveryFeeOwed] = useState(0);
 
   const addToCart = (vendorId: string, items: OrderLineItem[]) => {
     const id = `line-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -78,20 +97,36 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const removeLine = (id: string) => setLines((prev) => prev.filter((line) => line.id !== id));
 
+  const setDeliveryCoords = (lat: number, lng: number) => {
+    setDeliveryLat(lat);
+    setDeliveryLng(lng);
+  };
+
+  const clearDeliveryCoords = () => {
+    setDeliveryLat(null);
+    setDeliveryLng(null);
+  };
+
   const clearCart = () => {
     setLines([]);
     setDeliveryMode('delivery');
     setCustomerPhone('');
     setCustomerLocation('');
+    setDeliveryLat(null);
+    setDeliveryLng(null);
     setPaymentMethod('cash');
+    setQuotedDeliveryFee(DELIVERY_FEE_STANDARD_GHS);
+    setQuotedDistanceKm(null);
   };
 
   const toggleDeliveryMode = () => setDeliveryMode((m) => (m === 'pickup' ? 'delivery' : 'pickup'));
 
   const totalItems = lines.reduce((sum, l) => sum + l.quantity, 0);
   const itemsSubtotal = lines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0);
+  const deliveryComponent =
+    deliveryMode === 'delivery' ? quotedDeliveryFee : 0;
   const totalPrice =
-    lines.length === 0 ? 0 : itemsSubtotal + (deliveryMode === 'delivery' ? DELIVERY_FEE : 0) + SERVICE_FEE;
+    lines.length === 0 ? 0 : itemsSubtotal + deliveryComponent + SERVICE_FEE + pendingDeliveryFeeOwed;
 
   return (
     <CartContext.Provider
@@ -100,8 +135,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
         deliveryMode, toggleDeliveryMode,
         customerPhone, setCustomerPhone,
         customerLocation, setCustomerLocation,
+        deliveryLat, deliveryLng, setDeliveryCoords, clearDeliveryCoords,
         paymentMethod, setPaymentMethod,
+        quotedDeliveryFee, setQuotedDeliveryFee,
+        quotedDistanceKm, setQuotedDistanceKm,
         itemsSubtotal, totalItems, totalPrice,
+        pendingDeliveryFeeOwed, setPendingDeliveryFeeOwed,
       }}
     >
       {children}
