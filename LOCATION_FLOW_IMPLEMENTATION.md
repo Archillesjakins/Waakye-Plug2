@@ -31,12 +31,13 @@ All customer-facing copy uses plain language:
 ## Technical Changes
 
 ### Database
-**New columns in `orders` table:**
-- `delivery_lat` NUMERIC(10, 7)
-- `delivery_lng` NUMERIC(10, 7)
-- Indexed for spatial queries
+**Columns used in `orders` table:**
+- `delivery_lat` - Already exists in live DB (applied via `2026-09-16_order_delivery_coords.sql`)
+- `delivery_lng` - Already exists in live DB (applied via `2026-09-16_order_delivery_coords.sql`)
+- `delivery_code` - Already exists in live DB (applied via `20260929_orders_delivery_code.sql`)
+- `delivery_code_hash` - Hash for verification (same migration)
 
-**Migration:** `schema/migrations/2026-10-02_delivery_coordinates.sql`
+**No new migration needed** - All required columns already exist in live project `verncapitxzsgcughvil`.
 
 ### New Components
 1. **LocationPicker** (`src/app/components/LocationPicker.tsx`)
@@ -56,6 +57,7 @@ All customer-facing copy uses plain language:
 ### Modified Screens
 - **OrderSummaryScreen**: Location picker instead of textarea
 - **VendorSelectScreen**: Location change button added
+- **ConfirmationScreen**: Shows 4-digit delivery code from `orders.delivery_code`
 - **App.tsx**: Validates coordinates before order creation
 
 ### Orders API
@@ -130,11 +132,11 @@ These are documented in the PR but not blocking this change.
 
 ## Files Changed
 
-- `schema/migrations/2026-10-02_delivery_coordinates.sql` - Database migration
 - `src/app/components/LocationPicker.tsx` - Main location picker modal
 - `src/app/components/InteractiveMap.tsx` - Map with pin dropping
 - `src/app/components/screens/OrderSummaryScreen.tsx` - Use picker instead of textarea
 - `src/app/components/screens/VendorSelectScreen.tsx` - Add location change
+- `src/app/components/screens/ConfirmationScreen.tsx` - Display delivery code
 - `src/app/context/CartContext.tsx` - Store coordinates
 - `src/app/context/VendorContext.tsx` - Manual location override
 - `src/app/lib/orders.ts` - Save coordinates
