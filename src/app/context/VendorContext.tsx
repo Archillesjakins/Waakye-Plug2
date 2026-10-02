@@ -1,7 +1,10 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
-import { getApprovedVendors, distanceKm, type Vendor } from '@/app/lib/vendorMenu';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { getApprovedVendors, getVendorById, distanceKm, type Vendor } from '@/app/lib/vendorMenu';
+import { supabase } from '@/app/lib/supabase';
+
+export type { Vendor } from '@/app/lib/vendorMenu';
 
 export type VendorWithDistance = Vendor & { distanceKm: number | null };
 
@@ -13,6 +16,8 @@ interface VendorContextType {
   selectedVendor: Vendor | null;
   selectVendor: (vendor: Vendor) => void;
   clearVendor: () => void;
+  refreshSelectedVendor: () => Promise<void>;
+  refreshVendors: () => Promise<void>;
   locationStatus: LocationStatus;
   requestLocation: () => void;
 }
@@ -96,6 +101,53 @@ export function VendorProvider({ children }: { children: ReactNode }) {
     setSelectedVendor(null);
   }
 
+  const refreshVendors = useCallback(async () => {
+    try {
+      const data = await getApprovedVendors();
+      setVendors(data);
+    } catch (err) {
+      console.error('Could not refresh vendors', err);
+    }
+  }, []);
+
+  async function refreshSelectedVendor() {
+    if (!selectedVendor) return;
+    try {
+      const fresh = await getVendorById(selectedVendor.id);
+      if (fresh) setSelectedVendor(fresh);
+    } catch (err) {
+      console.error('Could not refresh vendor', err);
+    }
+  }
+
+  // Live vendor row (is_open, daily hours) — no reload when admin toggles.
+  useEffect(() => {
+    if (!selectedVendor) return;
+
+    refreshSelectedVendor();
+
+    const channel = supabase
+      .channel(`vendor-live-${selectedVendor.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'vendors', filter: `id=eq.${selectedVendor.id}` },
+        (payload) => {
+          const row = payload.new as Partial<Vendor> & { id?: string };
+          if (!row?.id) return;
+          setSelectedVendor((prev) => (prev ? { ...prev, ...row } : prev));
+          setVendors((prev) => prev.map((v) => (v.id === row.id ? { ...v, ...row } : v)));
+        },
+      )
+      .subscribe();
+
+    const interval = setInterval(refreshSelectedVendor, 120_000);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh when vendor id changes only
+  }, [selectedVendor?.id]);
+
   return (
     <VendorContext.Provider
       value={{
@@ -104,6 +156,8 @@ export function VendorProvider({ children }: { children: ReactNode }) {
         selectedVendor,
         selectVendor,
         clearVendor,
+        refreshSelectedVendor,
+        refreshVendors,
         locationStatus,
         requestLocation,
       }}

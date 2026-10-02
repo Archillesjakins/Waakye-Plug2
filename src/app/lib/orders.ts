@@ -1,5 +1,8 @@
 import { supabase } from '@/app/lib/supabase';
 import type { CartLine } from '@/app/context/CartContext';
+import { generateDeliveryCode } from '@/app/lib/deliveryCode';
+import { quoteDeliveryFee } from '@/app/lib/deliveryPricing';
+import { getVendorById } from '@/app/lib/vendorMenu';
 
 export function flattenCartItems(lines: CartLine[]) {
   const merged: Record<string, { id: string; name: string; price: number; category: string; quantity: number }> = {};
@@ -18,7 +21,8 @@ export function flattenCartItems(lines: CartLine[]) {
   return Object.values(merged);
 }
 
-// Delivery-only — there's no pickup, so every order needs a real address.
+// Delivery-only — there's no pickup, so every order needs a real address
+// and a customer-confirmed GPS pin (delivery_lat / delivery_lng) for rider nav.
 export async function createOrder({
   customerId,
   vendorId,
@@ -26,6 +30,10 @@ export async function createOrder({
   totalAmount,
   deliveryAddress,
   paymentMethod,
+  deliveryLat,
+  deliveryLng,
+  quotedDeliveryFee,
+  quotedDistanceKm,
 }: {
   customerId: string;
   vendorId: string;
@@ -33,24 +41,68 @@ export async function createOrder({
   totalAmount: number;
   deliveryAddress: string;
   paymentMethod: 'cash' | 'momo';
+  deliveryLat: number;
+  deliveryLng: number;
+  /** Must match checkout UI (CartContext). */
+  quotedDeliveryFee: number;
+  quotedDistanceKm?: number | null;
 }) {
   const items = flattenCartItems(lines);
 
-  const { data, error } = await supabase
-    .from('orders')
-    .insert({
-      customer_id: customerId,
-      vendor_id: vendorId,
-      items,
-      total_amount: totalAmount,
-      delivery_mode: 'delivery',
-      delivery_address: deliveryAddress,
-      payment_method: paymentMethod,
-      status: 'available',
-    })
-    .select()
-    .single();
+  const vendor = await getVendorById(vendorId);
+  const quoted = quoteDeliveryFee(
+    vendor?.latitude ?? null,
+    vendor?.longitude ?? null,
+    deliveryLat,
+    deliveryLng
+  );
+  const deliveryFee = quotedDeliveryFee;
+  const distanceKm = quotedDistanceKm ?? quoted.distanceKm;
+
+  const clientDeliveryCode = generateDeliveryCode();
+
+  const row: Record<string, unknown> = {
+    customer_id: customerId,
+    vendor_id: vendorId,
+    items,
+    total_amount: totalAmount,
+    delivery_fee: deliveryFee,
+    delivery_mode: 'delivery',
+    delivery_address: deliveryAddress,
+    payment_method: paymentMethod,
+    delivery_lat: deliveryLat,
+    delivery_lng: deliveryLng,
+    status: 'available',
+    delivery_code: clientDeliveryCode,
+  };
+  if (distanceKm != null) row.distance_km = distanceKm;
+
+  let { data, error } = await supabase.from('orders').insert(row).select().single();
+
+  // Live DB may lag behind app deploy — apply schema/migrations/20260928_orders_distance_km.sql
+  if (
+    error?.code === 'PGRST204' &&
+    typeof error.message === 'string' &&
+    error.message.includes('distance_km')
+  ) {
+    const { distance_km: _drop, ...withoutDistance } = row;
+    ({ data, error } = await supabase.from('orders').insert(withoutDistance).select().single());
+  }
+
+  if (
+    error?.code === 'PGRST204' &&
+    typeof error.message === 'string' &&
+    error.message.includes('delivery_code')
+  ) {
+    const { delivery_code: _dropCode, ...withoutCode } = row;
+    ({ data, error } = await supabase.from('orders').insert(withoutCode).select().single());
+  }
 
   if (error) throw error;
-  return data;
+
+  const persisted = (data as { delivery_code?: string | null } | null)?.delivery_code;
+  return {
+    ...data,
+    delivery_code: persisted ?? clientDeliveryCode,
+  };
 }

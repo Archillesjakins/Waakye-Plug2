@@ -30,6 +30,9 @@ export interface OrderItem {
   deliveryMode: 'delivery';
   customerPhone?: string;
   customerLocation?: string;
+  /** Customer-confirmed dropoff GPS pin (orders.delivery_lat / delivery_lng). */
+  deliveryLat?: number;
+  deliveryLng?: number;
 }
 export interface Breakfast {
   drink: Sbreakfast;
@@ -100,7 +103,8 @@ export const EXTRAS: Extra[] = [
   { id: 'drink', name: 'Ice-Kenkey', price: 10, available: true },
 ];
 
-export const DELIVERY_FEE = 8;
+/** Default delivery — see `deliveryPricing.ts` (10 GHS ≤4 km, 15 GHS farther). */
+export const DELIVERY_FEE = 10;
 export const SERVICE_FEE = 1;
 
 export function calculateBreakfastTotal(order: Breakfast): number {
