@@ -294,6 +294,12 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
   async function handleOrderConfirmed() {
     if (!selectedVendor || !guardOrderingAction()) return;
 
+    // Validate that we have coordinates
+    if (deliveryLat === null || deliveryLng === null) {
+      toast.error('Please set a delivery location');
+      return;
+    }
+
     try {
       if (
         typeof deliveryLat !== 'number' ||
@@ -311,6 +317,8 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
         lines,
         totalAmount: totalPrice,
         deliveryAddress: customerLocation,
+        deliveryLat,
+        deliveryLng,
         paymentMethod,
         deliveryLat,
         deliveryLng,

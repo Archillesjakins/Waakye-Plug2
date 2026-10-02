@@ -20,6 +20,8 @@ interface VendorContextType {
   refreshVendors: () => Promise<void>;
   locationStatus: LocationStatus;
   requestLocation: () => void;
+  customerCoords: { lat: number; lng: number } | null;
+  setCustomerCoords: (coords: { lat: number; lng: number }) => void;
 }
 
 const VendorContext = createContext<VendorContextType | undefined>(undefined);
@@ -120,6 +122,11 @@ export function VendorProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function handleSetCustomerCoords(coords: { lat: number; lng: number }) {
+    setCustomerCoords(coords);
+    setLocationStatus('granted');
+  }
+
   // Live vendor row (is_open, daily hours) — no reload when admin toggles.
   useEffect(() => {
     if (!selectedVendor) return;
@@ -160,6 +167,8 @@ export function VendorProvider({ children }: { children: ReactNode }) {
         refreshVendors,
         locationStatus,
         requestLocation,
+        customerCoords,
+        setCustomerCoords: handleSetCustomerCoords,
       }}
     >
       {children}

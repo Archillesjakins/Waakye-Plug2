@@ -29,9 +29,9 @@ export async function createOrder({
   lines,
   totalAmount,
   deliveryAddress,
-  paymentMethod,
   deliveryLat,
   deliveryLng,
+  paymentMethod,
   quotedDeliveryFee,
   quotedDistanceKm,
 }: {
@@ -40,9 +40,9 @@ export async function createOrder({
   lines: CartLine[];
   totalAmount: number;
   deliveryAddress: string;
-  paymentMethod: 'cash' | 'momo';
   deliveryLat: number;
   deliveryLng: number;
+  paymentMethod: 'cash' | 'momo';
   /** Must match checkout UI (CartContext). */
   quotedDeliveryFee: number;
   quotedDistanceKm?: number | null;

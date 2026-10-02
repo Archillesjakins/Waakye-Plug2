@@ -6,16 +6,20 @@ import { Store, MapPin, Search, Loader2, LocateFixed, UtensilsCrossed } from 'lu
 import { useVendor, type Vendor } from '@/app/context/VendorContext';
 import { vendorAcceptingOrders } from '@/app/lib/vendorHours';
 import { supabase } from '@/app/lib/supabase';
+import { LocationPicker, type DeliveryLocation } from '@/app/components/LocationPicker';
+import { toast } from 'sonner';
 
 interface VendorSelectScreenProps {
   onSelect: () => void;
 }
 
 export function VendorSelectScreen({ onSelect }: VendorSelectScreenProps) {
-  const { vendors, loadingVendors, selectVendor, locationStatus, requestLocation, refreshVendors } =
+  const { vendors, loadingVendors, selectVendor, locationStatus, requestLocation, customerCoords, setCustomerCoords, refreshVendors } =
     useVendor();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'open' | 'nearby'>('all');
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [locationLabel, setLocationLabel] = useState<string>('Your current location');
 
   // Live vendor list (hours, is_open, new approvals).
   useEffect(() => {
@@ -37,6 +41,12 @@ export function VendorSelectScreen({ onSelect }: VendorSelectScreenProps) {
     if (!vendorAcceptingOrders(vendor)) return;
     selectVendor(vendor);
     onSelect();
+  }
+
+  function handleLocationChange(location: DeliveryLocation) {
+    setCustomerCoords({ lat: location.lat, lng: location.lng });
+    setLocationLabel(location.displayName);
+    toast.success('Location updated');
   }
 
   const filteredVendors = useMemo(() => {
@@ -79,9 +89,15 @@ export function VendorSelectScreen({ onSelect }: VendorSelectScreenProps) {
         )}
         <button
           onClick={requestLocation}
-          className="bg-[#7a1d1d] text-white px-6 py-3 rounded-2xl font-bold hover:bg-[#6a1717] transition-colors"
+          className="bg-[#7a1d1d] text-white px-6 py-3 rounded-2xl font-bold hover:bg-[#6a1717] transition-colors mb-3"
         >
           Enable Location
+        </button>
+        <button
+          onClick={() => setShowLocationPicker(true)}
+          className="bg-white text-[#7a1d1d] border border-[#7a1d1d] px-6 py-3 rounded-2xl font-bold hover:bg-[#7a1d1d]/5 transition-colors"
+        >
+          Set location on map
         </button>
       </div>
     );
@@ -96,10 +112,16 @@ export function VendorSelectScreen({ onSelect }: VendorSelectScreenProps) {
           <div className="w-10 h-10 rounded-full bg-[#7a1d1d]/10 flex items-center justify-center shrink-0">
             <MapPin className="w-5 h-5 text-[#7a1d1d]" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-xs text-gray-400 font-medium">Ordering near</p>
-            <p className="font-bold text-sm truncate">Your current location</p>
+            <p className="font-bold text-sm truncate">{locationLabel}</p>
           </div>
+          <button
+            onClick={() => setShowLocationPicker(true)}
+            className="text-xs font-bold text-[#7a1d1d] hover:underline shrink-0"
+          >
+            Change
+          </button>
         </div>
 
         {/* ── Search bar ── */}
@@ -199,6 +221,19 @@ export function VendorSelectScreen({ onSelect }: VendorSelectScreenProps) {
           </div>
         )}
       </div>
+
+      {/* Location Picker Modal */}
+      {showLocationPicker && (
+        <LocationPicker
+          value={
+            customerCoords
+              ? { lat: customerCoords.lat, lng: customerCoords.lng, displayName: locationLabel }
+              : null
+          }
+          onChange={handleLocationChange}
+          onClose={() => setShowLocationPicker(false)}
+        />
+      )}
     </div>
   );
 }
