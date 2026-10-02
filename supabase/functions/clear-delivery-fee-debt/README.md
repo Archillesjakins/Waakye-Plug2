@@ -12,8 +12,8 @@ The customer app cannot directly clear `profiles.pending_delivery_fee_owed` due 
 ## How It Works
 
 1. Customer places order with debt included in total (CartContext adds `pendingDeliveryFeeOwed` to `totalPrice`)
-2. After successful `createOrder()`, the customer app calls this edge function
-3. Function uses service role to bypass RLS and set `pending_delivery_fee_owed = 0`
+2. After successful `createOrder()`, the customer app calls this edge function with user's JWT access token
+3. Function verifies JWT, extracts authenticated user ID, and uses service role to clear only that user's debt
 
 ## Deployment
 
@@ -43,15 +43,22 @@ async function handleOrderConfirmed() {
     
     // Clear debt if customer had outstanding amount
     if (pendingDeliveryFeeOwed > 0) {
+      // Get user's access token from current session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        console.error('No active session for debt clearing');
+        return;
+      }
+      
       const response = await fetch(
         `${supabaseUrl}/functions/v1/clear-delivery-fee-debt`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${supabaseAnonKey}`,
+            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ customer_id: userId }),
         }
       );
       
@@ -76,43 +83,35 @@ async function handleOrderConfirmed() {
 ## Testing
 
 ```bash
-# Test locally
+# Test with valid JWT access token
 curl -i --location --request POST 'http://localhost:54321/functions/v1/clear-delivery-fee-debt' \
-  --header 'Authorization: Bearer YOUR_ANON_KEY' \
-  --header 'Content-Type: application/json' \
-  --data '{"customer_id":"uuid-here"}'
+  --header 'Authorization: Bearer USER_JWT_ACCESS_TOKEN' \
+  --header 'Content-Type: application/json'
 
 # Expected response:
-# {"success":true,"message":"Debt cleared successfully"}
+# {"success":true,"message":"Debt cleared successfully","user_id":"uuid"}
+
+# Test with missing token (should fail)
+curl -i --location --request POST 'http://localhost:54321/functions/v1/clear-delivery-fee-debt' \
+  --header 'Content-Type: application/json'
+
+# Expected response:
+# HTTP/1.1 401 Unauthorized
+# {"error":"Missing Authorization header"}
 ```
 
 ## Security
 
-- ✅ Uses service role key (bypasses RLS)
+- ✅ **JWT authentication required** - verifies user identity via `supabase.auth.getUser(token)`
+- ✅ **User ID binding** - uses authenticated user.id only, never trusts body input
+- ✅ Uses service role key (bypasses RLS after auth verification)
 - ✅ CORS headers allow browser requests
-- ✅ Validates customer_id input
-- ⚠️ **No authentication check** - anyone with the anon key can call this
+- ✅ Returns 401 on missing/invalid token
+- ✅ Cannot clear another user's debt (user ID extracted from verified JWT)
 
-**Recommendation:** Add auth verification to ensure only the authenticated customer can clear their own debt:
-
-```typescript
-// Get user from JWT
-const authHeader = req.headers.get('Authorization')!
-const token = authHeader.replace('Bearer ', '')
-const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-
-if (authError || !user) {
-  return new Response(
-    JSON.stringify({ error: 'Unauthorized' }),
-    { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  )
-}
-
-// Verify customer_id matches authenticated user
-if (customer_id !== user.id) {
-  return new Response(
-    JSON.stringify({ error: 'Forbidden: can only clear your own debt' }),
-    { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  )
-}
-```
+**Security Model:**
+1. Client sends JWT access token in Authorization header
+2. Function verifies token with Supabase Auth
+3. Extracts authenticated user.id from verified token
+4. Clears debt only for that authenticated user
+5. No way to clear arbitrary user's debt via body payload

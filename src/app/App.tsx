@@ -31,6 +31,7 @@ import {
 } from '@/app/lib/deliveryCode';
 import { CustomerOrdersProvider, useCustomerOrders } from '@/app/context/CustomerOrdersContext';
 import { createOrder } from '@/app/lib/orders';
+import { supabase } from '@/app/lib/supabase';
 import type { MenuItem } from '@/app/lib/vendorMenu';
 import { Toaster, toast } from 'sonner';
 
@@ -334,27 +335,33 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
       // Clear pending delivery fee debt if customer had outstanding amount
       if (pendingDeliveryFeeOwed > 0) {
         try {
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+          // Get user's JWT access token from current session
+          const { data: { session } } = await supabase.auth.getSession();
           
-          const response = await fetch(
-            `${supabaseUrl}/functions/v1/clear-delivery-fee-debt`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${supabaseAnonKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ customer_id: userId }),
-            }
-          );
-          
-          if (!response.ok) {
-            console.error('Failed to clear debt:', await response.text());
+          if (!session?.access_token) {
+            console.error('No active session for debt clearing');
             // Non-critical: debt will be applied again next order if this fails
           } else {
-            // Reset local state
-            setPendingDeliveryFeeOwed(0);
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            
+            const response = await fetch(
+              `${supabaseUrl}/functions/v1/clear-delivery-fee-debt`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${session.access_token}`,
+                  'Content-Type': 'application/json',
+                },
+              }
+            );
+            
+            if (!response.ok) {
+              console.error('Failed to clear debt:', await response.text());
+              // Non-critical: debt will be applied again next order if this fails
+            } else {
+              // Reset local state
+              setPendingDeliveryFeeOwed(0);
+            }
           }
         } catch (debtError) {
           console.error('Error calling debt clearing function:', debtError);

@@ -11,25 +11,42 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', // service role bypasses RLS
-    )
-
-    const { customer_id } = await req.json()
-
-    if (!customer_id) {
+    // Extract and validate JWT from Authorization header
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: 'customer_id is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Missing Authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
+    const token = authHeader.replace('Bearer ', '')
+    
+    // Create client with service role for DB operations (after auth verification)
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+
+    // Verify JWT and get authenticated user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+
+    if (authError || !user) {
+      console.error('Authentication failed:', authError)
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Use authenticated user's ID only - never trust body customer_id
+    const customerId = user.id
 
     // Clear the debt (order total already included it)
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ pending_delivery_fee_owed: 0 })
-      .eq('id', customer_id)
+      .eq('id', customerId)
 
     if (profileError) {
       console.error('Error clearing debt:', profileError)
@@ -40,13 +57,13 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: 'Debt cleared successfully' }),
+      JSON.stringify({ success: true, message: 'Debt cleared successfully', user_id: customerId }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
     console.error('Unexpected error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error.message ?? 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
