@@ -15,6 +15,7 @@ import {
   rememberActiveOrderHandoff,
   rememberDeliveryCode,
 } from '@/app/lib/deliveryCode';
+import { getStatusLabel, type OrderStatus } from '@/app/lib/orderStatusLabels';
 
 const BRAND = '#7a1d1d';
 interface ConfirmationScreenProps {
@@ -27,30 +28,33 @@ interface ConfirmationScreenProps {
   onHandoffChange?: () => void;
 }
 
-type OrderStatus = 'available' | 'rider_assigned' | 'picked_up' | 'delivered' | 'cancelled';
-
 const TIMELINE_STEPS: {
+  status: OrderStatus;
   label: string;
   description: string;
   activeDescription: string;
 }[] = [
   {
-    label: 'Order placed',
+    status: 'available',
+    label: getStatusLabel('available'),
     description: 'Your order was placed for delivery.',
     activeDescription: 'We’re finding a rider for your order.',
   },
   {
-    label: 'Rider assigned',
+    status: 'rider_assigned',
+    label: getStatusLabel('rider_assigned'),
     description: 'A rider accepted your order.',
     activeDescription: 'Your rider is heading to the vendor.',
   },
   {
-    label: 'On the way',
+    status: 'picked_up',
+    label: getStatusLabel('picked_up'),
     description: 'Your rider picked up the food.',
     activeDescription: 'Your order is on the way — keep your phone close.',
   },
   {
-    label: 'Delivered',
+    status: 'delivered',
+    label: getStatusLabel('delivered'),
     description: 'Your order was delivered. Enjoy!',
     activeDescription: 'Almost there…',
   },
@@ -184,7 +188,7 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
         {cancelled ? (
           <div className="bg-white rounded-2xl border border-red-100 p-6 text-center">
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-            <h2 className="font-bold text-lg text-gray-900">Order cancelled</h2>
+            <h2 className="font-bold text-lg text-gray-900">Order {getStatusLabel('cancelled')}</h2>
             <p className="text-sm text-gray-500 mt-2">The vendor cancelled this order. Contact them if you need help.</p>
           </div>
         ) : (
@@ -205,7 +209,7 @@ export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBac
                 const showTime = isComplete && time;
 
                 return (
-                  <div key={step.label} className={`relative flex gap-3 ${i < TIMELINE_STEPS.length - 1 ? 'pb-8' : ''}`}>
+                  <div key={step.status} className={`relative flex gap-3 ${i < TIMELINE_STEPS.length - 1 ? 'pb-8' : ''}`}>
                     {showTime && (
                       <span className="absolute -left-14 top-0 w-12 text-right text-[11px] font-medium text-gray-400 tabular-nums">
                         {time}
