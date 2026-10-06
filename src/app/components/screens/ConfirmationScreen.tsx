@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Check, PartyPopper, Clock, Bike, Home, XCircle } from 'lucide-react';
 import { useCart, CartLine, lineUnitPrice } from '@/app/context/CartContext';
 import { supabase } from '@/app/lib/supabase';
-import { type OrderStatus, getStatusLabel } from '@/app/lib/orderStatusLabels';
+import { type OrderStatus, orderStatusLabel } from '@/app/lib/orderStatusLabels';
 
 interface ConfirmationScreenProps {
   orderId: string | null;
@@ -14,10 +14,10 @@ interface ConfirmationScreenProps {
 
 // Canonical steps shown in the tracker, in lifecycle order.
 const STATUS_STEPS: { key: OrderStatus; label: string; icon: any }[] = [
-  { key: 'available', label: 'Order Sent', icon: Clock },
-  { key: 'rider_assigned', label: getStatusLabel('rider_assigned'), icon: Check },
-  { key: 'picked_up', label: getStatusLabel('picked_up'), icon: Bike },
-  { key: 'delivered', label: getStatusLabel('delivered'), icon: Home },
+  { key: 'available', label: orderStatusLabel('available'), icon: Clock },
+  { key: 'rider_assigned', label: orderStatusLabel('rider_assigned'), icon: Check },
+  { key: 'picked_up', label: orderStatusLabel('picked_up'), icon: Bike },
+  { key: 'delivered', label: orderStatusLabel('delivered'), icon: Home },
 ];
 
 // Legacy statuses an old row might still carry (pre-canonical-enum data).
@@ -42,7 +42,7 @@ export function ConfirmationScreen({ orderId, onDone }: ConfirmationScreenProps)
 
     // Mount-time sync: if the user re-enters this screen (or reloads) after
     // the order has already progressed, start from the real current status
-    // instead of always showing "Order Sent".
+    // instead of always showing the initial "Looking for a rider" state.
     let alive = true;
     supabase
       .from('orders')
@@ -81,22 +81,27 @@ export function ConfirmationScreen({ orderId, onDone }: ConfirmationScreenProps)
   const stepIndex =
     currentStepIndex >= 0
       ? currentStepIndex
-      : (LEGACY_STEP_INDEX[status] ?? 0);
+      : Object.prototype.hasOwnProperty.call(LEGACY_STEP_INDEX, status)
+        ? LEGACY_STEP_INDEX[status]
+        : 0;
 
   function handleDone() {
     onDone();
   }
 
   // Friendly, status-aware header copy so re-entering the screen late shows
-  // where things actually are, not a stale "Order Sent!".
+  // where things actually are, not a stale initial header.
   const HEADER_COPY: Record<OrderStatus, { title: string; icon: any; sub: string }> = {
-    available: { title: 'Order Sent!', icon: PartyPopper, sub: 'We\u2019re lining up a rider \u2014 this updates live.' },
-    rider_assigned: { title: `${getStatusLabel('rider_assigned')}!`, icon: Check, sub: 'Your rider has the order \u2014 food is on its way soon.' },
-    picked_up: { title: `${getStatusLabel('picked_up')}!`, icon: Bike, sub: 'Your rider has picked it up \u2014 keep your phone close.' },
-    delivered: { title: `${getStatusLabel('delivered')}!`, icon: Home, sub: 'Enjoy your waakye \u2014 thanks for ordering!' },
-    cancelled: { title: `Order ${getStatusLabel('cancelled')}`, icon: XCircle, sub: 'The vendor cancelled this order. Reach out to them directly if you\u2019re not sure why.' },
+    available: { title: 'Looking for a rider', icon: PartyPopper, sub: 'We\u2019re lining up a rider \u2014 this updates live.' },
+    rider_assigned: { title: 'Rider assigned!', icon: Check, sub: 'Your rider has the order \u2014 food is on its way soon.' },
+    picked_up: { title: 'On the way!', icon: Bike, sub: 'Your rider has picked it up \u2014 keep your phone close.' },
+    delivered: { title: 'Delivered!', icon: Home, sub: 'Enjoy your waakye \u2014 thanks for ordering!' },
+    cancelled: { title: 'Order cancelled', icon: XCircle, sub: 'The vendor cancelled this order. Reach out to them directly if you\u2019re not sure why.' },
   };
-  const header = HEADER_COPY[status] ?? HEADER_COPY.available;
+  // Unknown/legacy statuses get the same neutral 'Active order' copy the
+  // shared helper uses, rather than pretending we're still finding a rider.
+  const UNKNOWN_HEADER = { title: orderStatusLabel(null), icon: Clock, sub: 'Your order is in progress \u2014 this updates live.' };
+  const header = Object.prototype.hasOwnProperty.call(HEADER_COPY, status) ? HEADER_COPY[status] : UNKNOWN_HEADER;
   const HeaderIcon = header.icon;
 
   return (
@@ -112,7 +117,7 @@ export function ConfirmationScreen({ orderId, onDone }: ConfirmationScreenProps)
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5">
                 <XCircle className="w-8 h-8 text-red-500" />
               </div>
-              <h1 className="text-2xl font-bold text-center mb-1.5">Order {getStatusLabel('cancelled')}</h1>
+              <h1 className="text-2xl font-bold text-center mb-1.5">Order cancelled</h1>
               <p className="text-gray-500 text-center text-sm mb-5">
                 The vendor cancelled this order. Reach out to them directly if you're not sure why.
               </p>

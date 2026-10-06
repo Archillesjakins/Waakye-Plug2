@@ -6,7 +6,7 @@ import { ChevronLeft, Package, Loader2, MapPin, RotateCcw, Bike } from 'lucide-r
 import { fetchMyOrders, type CustomerOrder } from '@/app/lib/customerOrders';
 import { useUser } from '@/app/context/UserContext';
 import { supabase } from '@/app/lib/supabase';
-import { STATUS_CONFIG, getStatusLabel } from '@/app/lib/orderStatusLabels';
+import { STATUS_CONFIG, isOrderStatus, orderStatusLabel } from '@/app/lib/orderStatusLabels';
 
 interface MyOrdersScreenProps {
   onBack: () => void;
@@ -87,7 +87,9 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
         ) : (
           <div className="space-y-3">
             {orders.map((order, i) => {
-              const config = STATUS_CONFIG[order.status] ?? { label: getStatusLabel(order.status), icon: Package, color: 'text-gray-500', bg: 'bg-gray-100' };
+              const config = isOrderStatus(order.status)
+                ? STATUS_CONFIG[order.status]
+                : { label: orderStatusLabel(order.status), icon: Package, color: 'text-gray-500', bg: 'bg-gray-100' };
               const StatusIcon = config.icon;
               const riderName = order.riders?.profiles?.full_name;
 
@@ -123,7 +125,7 @@ export function MyOrdersScreen({ onBack, onOrderAgain }: MyOrdersScreenProps) {
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">
-                        {order.status === 'cancelled' ? '—' : getStatusLabel('available')}
+                        {order.status === 'available' ? orderStatusLabel('available') : '—'}
                       </span>
                     )}
                     <span className="font-bold text-sm text-[#7a1d1d]">GH₵{order.total_amount}</span>

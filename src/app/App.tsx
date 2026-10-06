@@ -11,7 +11,7 @@ import { BuildWaakyeScreen } from '@/app/components/screens/BuildWaakyeScreen';
 import { SBlinkspage } from '@/app/components/screens/SBlinkspage';
 import { OrderSummaryScreen } from '@/app/components/screens/OrderSummaryScreen';
 import { ConfirmationScreen } from '@/app/components/screens/ConfirmationScreen';
-import { MyOrdersScreen } from '@/app/components/screens/MyOrdersScreen';import { UsernameScreen } from '@/app/components/screens/UsernameScreen';
+import { UsernameScreen } from '@/app/components/screens/UsernameScreen';
 import { VendorSelectScreen } from '@/app/components/screens/VendorSelectScreen';
 import { MyOrdersScreen } from '@/app/components/screens/MyOrdersScreen';
 import { useUser } from '@/app/context/UserContext';
