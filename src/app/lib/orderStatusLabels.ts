@@ -24,7 +24,7 @@ const LEGACY_TO_CANONICAL: Record<string, OrderStatus> = {
 
 export function getStatusLabel(status: string | undefined | null): string {
   if (!status) return 'Active order';
-  if (status in ORDER_STATUS_LABELS) {
+  if (Object.hasOwn(ORDER_STATUS_LABELS, status)) {
     return ORDER_STATUS_LABELS[status as OrderStatus];
   }
   const mapped = LEGACY_TO_CANONICAL[status];
@@ -32,6 +32,9 @@ export function getStatusLabel(status: string | undefined | null): string {
   return 'Active order';
 }
 
+
+/** Alias of getStatusLabel for callers expecting orderStatusLabel. */
+export const orderStatusLabel = getStatusLabel;
 /** @deprecated Prefer getStatusLabel — kept for ActiveOrderHandoffBar and older imports. */
 export function customerOrderStatusLabel(status: string | undefined): string {
   return getStatusLabel(status);
@@ -92,7 +95,7 @@ export const STATUS_CONFIG: Record<string, StatusVisual> = {
 };
 
 export function getStatusConfig(status: string | undefined | null): StatusVisual {
-  if (status && STATUS_CONFIG[status]) return STATUS_CONFIG[status];
+  if (status && Object.hasOwn(STATUS_CONFIG, status)) return STATUS_CONFIG[status];
   return {
     label: getStatusLabel(status),
     icon: Clock,

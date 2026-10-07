@@ -108,7 +108,7 @@ export function MyOrdersScreen({ onBack, onViewOrder, onOrderAgain }: MyOrdersSc
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">
-                        {order.status === 'cancelled' ? '—' : getStatusLabel('available')}
+                        {order.status === 'available' ? getStatusLabel('available') : '—'}
                       </span>
                     )}
                     <span className="font-bold text-sm text-[#7a1d1d]">GH₵{order.total_amount}</span>
