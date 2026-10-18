@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { ChevronLeft, Check, XCircle } from 'lucide-react';
-import { useCart } from '@/app/context/CartContext';
+import { useCart, type CartLine } from '@/app/context/CartContext';
 import { useLiveOrderDetail } from '@/app/context/CustomerOrdersContext';
 import type { CustomerOrder } from '@/app/lib/customerOrders';
 import { DeliveryCodeCard } from '@/app/components/DeliveryCodeCard';
@@ -26,6 +26,9 @@ interface ConfirmationScreenProps {
   /** Browse menu — active order + code stay saved until delivered. */
   onBack?: () => void;
   onHandoffChange?: () => void;
+  /** Snapshot of the just-placed cart (the live cart is cleared on insert). */
+  fallbackLines?: CartLine[];
+  fallbackTotal?: number;
 }
 
 const TIMELINE_STEPS: {
@@ -94,8 +97,18 @@ function shortOrderRef(id: string): string {
   return id.replace(/-/g, '').slice(-4).toUpperCase();
 }
 
-export function ConfirmationScreen({ orderId, initialDeliveryCode, onDone, onBack, onHandoffChange }: ConfirmationScreenProps) {
-  const { lines, totalPrice } = useCart();
+export function ConfirmationScreen({
+  orderId,
+  initialDeliveryCode,
+  onDone,
+  onBack,
+  onHandoffChange,
+  fallbackLines,
+  fallbackTotal,
+}: ConfirmationScreenProps) {
+  const cart = useCart();
+  const lines = fallbackLines ?? cart.lines;
+  const totalPrice = fallbackTotal ?? cart.totalPrice;
   const order = useLiveOrderDetail(orderId);
   const status = (order?.status ?? 'available') as OrderStatus;
   const pinnedCodeRef = useRef<string | null>(null);

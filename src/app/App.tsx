@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getPlatformOrderingStatus, canPlaceOrders as canPlaceOrdersNow } from '@/app/utils/timeUtils';
 import { vendorAcceptingOrders } from '@/app/lib/vendorHours';
 import { Breakfast } from '@/app/types/orderTypes';
@@ -224,7 +224,7 @@ type AppOrderingFlowProps = {
   totalItems: number;
   userId: string;
   selectedVendor: NonNullable<ReturnType<typeof useVendor>['selectedVendor']>;
-  lines: import('@/app/context/CartContext').OrderLineItem[];
+  lines: import('@/app/context/CartContext').CartLine[];
   totalPrice: number;
   deliveryLat: number | null;
   deliveryLng: number | null;
@@ -277,6 +277,16 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
 
   const { addToCart } = useCart();
   const { refresh: refreshOrders } = useCustomerOrders();
+  // Guards against a double tap / re-click firing a second insert for the same cart.
+  const placingOrderRef = useRef(false);
+  const [placingOrder, setPlacingOrder] = useState(false);
+  // Snapshot of what was just ordered, so the confirmation screen can still show
+  // items/total while the live order row loads — the cart itself is cleared on insert.
+  const [lastOrderSnapshot, setLastOrderSnapshot] = useState<{
+    orderId: string | null;
+    lines: typeof lines;
+    total: number;
+  } | null>(null);
 
   function handleWaakyeAddToCart(items: import('@/app/context/CartContext').OrderLineItem[]) {
     if (!selectedVendor || !guardOrderingAction()) return;
@@ -292,6 +302,7 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
   }
 
   async function handleOrderConfirmed() {
+    if (placingOrderRef.current) return;
     if (!selectedVendor || !guardOrderingAction()) return;
 
     // Validate that we have coordinates
@@ -300,6 +311,8 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
       return;
     }
 
+    placingOrderRef.current = true;
+    setPlacingOrder(true);
     try {
       if (
         typeof deliveryLat !== 'number' ||
@@ -323,7 +336,11 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
         quotedDeliveryFee,
         quotedDistanceKm,
       });
+      // The order row exists now — drop the cart (state + persisted draft) right
+      // away so a reload or a trip back to View Cart can't resubmit the same items.
       const orderId = created?.id as string | undefined;
+      setLastOrderSnapshot({ orderId: orderId ?? null, lines, total: totalPrice });
+      clearCart();
       if (!orderId) {
         toast.error('Order was created but id was missing — check My Orders.');
         setCurrentScreen('myOrders');
@@ -380,13 +397,17 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
       console.error('Could not create order', e);
       toast.error('Could not place your order — please try again.');
       return;
+    } finally {
+      placingOrderRef.current = false;
+      setPlacingOrder(false);
     }
 
     setCurrentScreen('confirm');
   }
 
   function handleOrderDone() {
-    clearCart();
+    // Cart was already cleared when the order was inserted; clearing again here
+    // would wipe a new cart the customer may have started since.
     refreshActiveHandoff();
     setCurrentScreen('myOrders');
   }
@@ -494,6 +515,7 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
             onBack={() => setCurrentScreen('home')}
             onConfirm={handleOrderConfirmed}
             canPlaceOrders={canOrder}
+            placingOrder={placingOrder}
           />
         );
 
@@ -502,6 +524,8 @@ function AppOrderingFlow(props: AppOrderingFlowProps) {
           <ConfirmationScreen
             orderId={lastOrderId}
             initialDeliveryCode={lastOrderDeliveryCode}
+            fallbackLines={lastOrderSnapshot?.orderId === lastOrderId ? lastOrderSnapshot?.lines : undefined}
+            fallbackTotal={lastOrderSnapshot?.orderId === lastOrderId ? lastOrderSnapshot?.total : undefined}
             onDone={handleOrderDone}
             onBack={() => setCurrentScreen('home')}
             onHandoffChange={refreshActiveHandoff}

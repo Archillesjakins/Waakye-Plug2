@@ -19,6 +19,8 @@ interface OrderSummaryScreenProps {
   onConfirm: () => void;
   /** Platform + vendor must both accept orders */
   canPlaceOrders?: boolean;
+  /** True while the order insert is in flight — blocks a second submit. */
+  placingOrder?: boolean;
 }
 
 /** Ho (Volta Region) — default map center / GPS fallback. Never Accra. */
@@ -41,7 +43,7 @@ function makeDropPinIcon() {
   });
 }
 
-export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }: OrderSummaryScreenProps) {
+export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true, placingOrder = false }: OrderSummaryScreenProps) {
   const {
     lines, updateQuantity, removeLine,
     customerPhone, setCustomerPhone,
@@ -295,9 +297,10 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
     typeof deliveryLng === 'number' &&
     Number.isFinite(deliveryLat) &&
     Number.isFinite(deliveryLng);
-  const canSubmit = canPlaceOrders && !!customerPhone && hasUsableAddress && hasCoords;
+  const canSubmit = canPlaceOrders && !placingOrder && !!customerPhone && hasUsableAddress && hasCoords;
 
   const handleConfirmClick = () => {
+    if (placingOrder) return;
     if (!canPlaceOrders) {
       toast.error('Ordering is closed for this vendor or for tonight.');
       return;
@@ -576,7 +579,7 @@ export function OrderSummaryScreen({ onBack, onConfirm, canPlaceOrders = true }:
                     : 'bg-[#7a1d1d] text-white hover:bg-[#6a1717]'
                 }`}
               >
-                Confirm Order
+                {placingOrder ? 'Placing order…' : 'Confirm Order'}
               </button>
             </div>
           </div>
